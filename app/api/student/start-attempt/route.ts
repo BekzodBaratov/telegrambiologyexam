@@ -1,24 +1,43 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { generateRandomization } from "@/lib/randomization"
+import { codeEntrySchema } from "@/lib/validations"
+import { checkRateLimit, validateTelegramId } from "@/lib/security"
 
 export async function POST(request: Request) {
   try {
-    const { code, telegramId, studentId } = await request.json()
+    const body = await request.json()
+    const { code, telegramId, studentId } = body
 
-    if (!code) {
-      return NextResponse.json({ message: "Kod kiritilishi shart" }, { status: 400 })
+    const codeValidation = codeEntrySchema.safeParse({ code })
+    if (!codeValidation.success) {
+      return NextResponse.json(
+        { message: codeValidation.error.errors[0]?.message || "Noto'g'ri kod formati" },
+        { status: 400 },
+      )
     }
 
-    if (!studentId) {
+    if (!studentId || typeof studentId !== "number") {
       return NextResponse.json({ message: "Student ID topilmadi" }, { status: 400 })
+    }
+
+    if (telegramId && !validateTelegramId(telegramId)) {
+      return NextResponse.json({ message: "Noto'g'ri Telegram ID" }, { status: 400 })
+    }
+
+    const rateLimit = checkRateLimit(`attempt:${studentId}`, 10, 3600)
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { message: "Juda ko'p urinish. Iltimos, keyinroq qayta urinib ko'ring." },
+        { status: 429 },
+      )
     }
 
     const [testCode] = await sql`
       SELECT tc.*, e.name as exam_name 
       FROM test_codes tc
       JOIN exams e ON tc.exam_id = e.id
-      WHERE tc.code = ${code} 
+      WHERE tc.code = ${code.toUpperCase()} 
         AND tc.is_active = true
         AND (tc.valid_from IS NULL OR tc.valid_from <= NOW())
         AND (tc.valid_to IS NULL OR tc.valid_to >= NOW())
@@ -35,7 +54,7 @@ export async function POST(request: Request) {
     // Check if student already took this test
     const [existingAttempt] = await sql`
       SELECT sa.* FROM student_attempts sa
-      WHERE sa.student_id = ${studentId} AND sa.code_used = ${code}
+      WHERE sa.student_id = ${studentId} AND sa.code_used = ${code.toUpperCase()}
     `
 
     if (existingAttempt) {
@@ -62,14 +81,14 @@ export async function POST(request: Request) {
       ORDER BY eq.position
     `
 
-    // Create a new attempt first to get the attempt ID for seeding
+    const { questionOrder, optionOrders, seed } = generateRandomization(questions)
+
+    // Create attempt with secure seed stored
     const [attempt] = await sql`
-      INSERT INTO student_attempts (student_id, exam_id, code_used, started_at)
-      VALUES (${studentId}, ${testCode.exam_id}, ${code}, NOW())
+      INSERT INTO student_attempts (student_id, exam_id, code_used, started_at, randomization_seed)
+      VALUES (${studentId}, ${testCode.exam_id}, ${code.toUpperCase()}, NOW(), ${seed})
       RETURNING id
     `
-
-    const { questionOrder, optionOrders } = generateRandomization(questions, attempt.id)
 
     await sql`
       UPDATE student_attempts 

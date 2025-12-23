@@ -15,18 +15,18 @@ import { TestCodesManager } from "@/components/admin/test-codes-manager"
 import { AttemptsViewer } from "@/components/admin/attempts-viewer"
 import { O2Evaluation } from "@/components/admin/o2-evaluation"
 import { RaschCalculator } from "@/components/admin/rasch-calculator"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
 export default function AdminDashboard() {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState("dashboard")
-  const { data: stats } = useSWR("/api/admin/stats", fetcher)
+  const { data: stats, isLoading: loadingStats } = useSWR("/api/admin/stats", fetcher)
 
   useEffect(() => {
     const tabFromUrl = searchParams.get("tab")
     if (tabFromUrl) {
-      // Map common names to tab keys
       const tabMap: Record<string, string> = {
         "test-codes": "codes",
         codes: "codes",
@@ -47,54 +47,70 @@ export default function AdminDashboard() {
     <div className="flex min-h-screen bg-muted/30">
       <AdminSidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
-      <main className="flex-1 p-6 overflow-auto">
+      <main className="flex-1 p-4 sm:p-6 overflow-auto">
         {activeTab === "dashboard" && (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-              <p className="text-muted-foreground">Imtihon tizimi umumiy ko&apos;rinishi</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
+              <p className="text-sm text-muted-foreground">Imtihon tizimi umumiy ko&apos;rinishi</p>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Jami o&apos;quvchilar</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats?.totalStudents || 0}</div>
-                </CardContent>
-              </Card>
+            <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+              {loadingStats ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <Card key={i}>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-4" />
+                    </CardHeader>
+                    <CardContent>
+                      <Skeleton className="h-8 w-16" />
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Talabalar</CardTitle>
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats?.totalStudents || 0}</div>
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Jami urinishlar</CardTitle>
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats?.totalAttempts || 0}</div>
-                </CardContent>
-              </Card>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Urinishlar</CardTitle>
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats?.totalAttempts || 0}</div>
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Tugallangan</CardTitle>
-                  <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats?.completedAttempts || 0}</div>
-                </CardContent>
-              </Card>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Tugallangan</CardTitle>
+                      <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats?.completedAttempts || 0}</div>
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Davom etmoqda</CardTitle>
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats?.inProgressAttempts || 0}</div>
-                </CardContent>
-              </Card>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Davom etmoqda</CardTitle>
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats?.inProgressAttempts || 0}</div>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -104,24 +120,35 @@ export default function AdminDashboard() {
                   <CardDescription>Savollar bazasi haqida</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Y1 (tanlov)</span>
-                      <span className="font-medium">{stats?.questionsByType?.Y1 || 0}</span>
+                  {loadingStats ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="flex justify-between">
+                          <Skeleton className="h-4 w-20" />
+                          <Skeleton className="h-4 w-8" />
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Y2 (guruhli)</span>
-                      <span className="font-medium">{stats?.questionsByType?.Y2 || 0}</span>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Y1 (tanlov)</span>
+                        <span className="font-medium">{stats?.questionsByType?.Y1 || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Y2 (guruhli)</span>
+                        <span className="font-medium">{stats?.questionsByType?.Y2 || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">O1 (qisqa javob)</span>
+                        <span className="font-medium">{stats?.questionsByType?.O1 || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">O2 (rasm bilan)</span>
+                        <span className="font-medium">{stats?.questionsByType?.O2 || 0}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">O1 (qisqa javob)</span>
-                      <span className="font-medium">{stats?.questionsByType?.O1 || 0}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">O2 (rasm bilan)</span>
-                      <span className="font-medium">{stats?.questionsByType?.O2 || 0}</span>
-                    </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
 

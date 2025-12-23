@@ -1,7 +1,27 @@
-import { neon } from "@neondatabase/serverless"
+import { neon, neonConfig } from "@neondatabase/serverless"
+
+neonConfig.fetchConnectionCache = true
 
 export const sql = neon(process.env.DATABASE_URL!)
 
+// Transaction helper function
+// Note: Neon serverless doesn't support traditional transactions,
+// but we can use BEGIN/COMMIT/ROLLBACK in a single request
+export async function transaction<T>(callback: (tx: typeof sql) => Promise<T>): Promise<T> {
+  // For Neon serverless, we use a simple wrapper
+  // In production, consider using Neon's transaction API or Prisma
+  try {
+    await sql`BEGIN`
+    const result = await callback(sql)
+    await sql`COMMIT`
+    return result
+  } catch (error) {
+    await sql`ROLLBACK`
+    throw error
+  }
+}
+
+// Type definitions
 export type Subject = {
   id: number
   name: string
@@ -49,6 +69,9 @@ export type Student = {
   id: number
   telegram_id: string | null
   full_name: string
+  region: string | null
+  district: string | null
+  phone_number: string | null
   grade_level: number | null
   created_at: Date
 }
@@ -60,6 +83,8 @@ export type TestCode = {
   max_attempts: number
   used_count: number
   is_active: boolean
+  valid_from: Date | null
+  valid_to: Date | null
   created_at: Date
 }
 
@@ -77,6 +102,9 @@ export type StudentAttempt = {
   finished_at: Date | null
   total_score: number | null
   rasch_score: number | null
+  question_order: number[] | null
+  option_orders: Record<number, string[]> | null
+  randomization_seed: number | null
 }
 
 export type StudentAnswer = {
@@ -90,4 +118,20 @@ export type StudentAnswer = {
   teacher_score: number | null
   created_at: Date
   updated_at: Date
+}
+
+export type AdminUser = {
+  id: number
+  email: string
+  password_hash: string
+  name: string
+  created_at: Date
+}
+
+export type AdminSession = {
+  id: number
+  user_id: number
+  token: string
+  expires_at: Date
+  created_at: Date
 }

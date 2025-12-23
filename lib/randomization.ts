@@ -1,5 +1,7 @@
+import { generateSecureRandomSeed } from "@/lib/security"
+
 // Seeded random number generator for deterministic randomization
-// Uses attempt_id as seed to ensure same order on page refresh
+// Uses cryptographically secure seed stored in database
 
 export class SeededRandom {
   private seed: number
@@ -36,11 +38,13 @@ interface Question {
 interface RandomizationResult {
   questionOrder: number[]
   optionOrders: Record<number, string[]>
+  seed: number
 }
 
-// Generate randomized question order and option orders
-export function generateRandomization(questions: Question[], attemptId: number): RandomizationResult {
-  const rng = new SeededRandom(attemptId)
+export function generateRandomization(questions: Question[], attemptId?: number): RandomizationResult {
+  // Use cryptographically secure seed instead of predictable attemptId
+  const seed = generateSecureRandomSeed()
+  const rng = new SeededRandom(seed)
 
   // Separate questions by type
   const y1Questions: Question[] = []
@@ -124,7 +128,7 @@ export function generateRandomization(questions: Question[], attemptId: number):
     }
   }
 
-  return { questionOrder, optionOrders }
+  return { questionOrder, optionOrders, seed }
 }
 
 // Reorder options based on stored order and remap correct answer
@@ -135,15 +139,15 @@ export function applyOptionOrder(
 ): { options: Record<string, string>; correctAnswer: string } {
   const optionLabels = ["A", "B", "C", "D", "E", "F", "G", "H"]
   const newOptions: Record<string, string> = {}
-  let newCorrectAnswer = correctAnswer
 
-  // Map old keys to new labels
   const oldToNew: Record<string, string> = {}
   storedOrder.forEach((oldKey, index) => {
     const newKey = optionLabels[index]
     oldToNew[oldKey] = newKey
     newOptions[newKey] = options[oldKey]
   })
+
+  let newCorrectAnswer = correctAnswer
 
   // Remap correct answer if it's a single letter (Y1)
   if (correctAnswer && correctAnswer.length === 1 && oldToNew[correctAnswer]) {

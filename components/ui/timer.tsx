@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from "react"
-import { Clock, AlertTriangle } from "lucide-react"
+import { Clock, AlertTriangle, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { EXAM_CONFIG } from "@/lib/constants"
 
 interface TimerProps {
   attemptId: number
@@ -16,18 +17,31 @@ export function Timer({ attemptId, part, onTimeUp, onTick, className }: TimerPro
   const [seconds, setSeconds] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
   const lastSyncRef = useRef<number>(Date.now())
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const serverTimeOffsetRef = useRef<number>(0)
 
-  // Fetch remaining time from backend
   const syncWithBackend = useCallback(async () => {
+    const syncStartTime = Date.now()
+    setIsSyncing(true)
+
     try {
       const response = await fetch(`/api/student/attempt-status?attemptId=${attemptId}`)
       if (!response.ok) {
         throw new Error("Failed to fetch time")
       }
+
+      const syncEndTime = Date.now()
+      const roundTripTime = syncEndTime - syncStartTime
       const data = await response.json()
+
+      // Calculate server time offset (accounting for network latency)
+      if (data.serverTime) {
+        const serverTime = new Date(data.serverTime).getTime()
+        serverTimeOffsetRef.current = serverTime - syncEndTime + roundTripTime / 2
+      }
 
       const remaining = part === "part1" ? data.part1RemainingSeconds : data.part2RemainingSeconds
       const expired = part === "part1" ? data.part1Expired : data.part2Expired
@@ -46,6 +60,7 @@ export function Timer({ attemptId, part, onTimeUp, onTick, className }: TimerPro
       setError("Vaqtni yangilashda xatolik")
     } finally {
       setIsLoading(false)
+      setIsSyncing(false)
     }
   }, [attemptId, part, onTimeUp])
 
@@ -54,18 +69,28 @@ export function Timer({ attemptId, part, onTimeUp, onTick, className }: TimerPro
     syncWithBackend()
   }, [syncWithBackend])
 
-  // Sync with backend every 30 seconds
   useEffect(() => {
-    syncIntervalRef.current = setInterval(() => {
-      syncWithBackend()
-    }, 30000)
+    const getSyncInterval = () => {
+      if (seconds !== null && seconds < EXAM_CONFIG.LOW_TIME_THRESHOLD_SECONDS) {
+        return 15000 // 15 seconds when time is low
+      }
+      return EXAM_CONFIG.TIMER_SYNC_INTERVAL_MS // 30 seconds normally
+    }
+
+    const scheduleSync = () => {
+      syncIntervalRef.current = setInterval(() => {
+        syncWithBackend()
+      }, getSyncInterval())
+    }
+
+    scheduleSync()
 
     return () => {
       if (syncIntervalRef.current) {
         clearInterval(syncIntervalRef.current)
       }
     }
-  }, [syncWithBackend])
+  }, [syncWithBackend, seconds])
 
   // Local countdown (1 second interval)
   useEffect(() => {
@@ -93,6 +118,13 @@ export function Timer({ attemptId, part, onTimeUp, onTick, className }: TimerPro
     }
   }, [seconds !== null, onTimeUp, onTick])
 
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current)
+    }
+  }, [])
+
   const formatTime = useCallback((totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600)
     const minutes = Math.floor((totalSeconds % 3600) / 60)
@@ -117,31 +149,35 @@ export function Timer({ attemptId, part, onTimeUp, onTick, className }: TimerPro
     return (
       <div
         className={cn(
-          "flex items-center gap-2 rounded-lg px-4 py-2 font-mono text-sm bg-destructive/10 text-destructive",
+          "flex items-center gap-2 rounded-lg px-4 py-2 font-mono text-sm bg-destructive/10 text-destructive cursor-pointer",
           className,
         )}
+        onClick={syncWithBackend}
+        title="Qayta sinab ko'rish uchun bosing"
       >
         <AlertTriangle className="h-4 w-4" />
-        <span>{error}</span>
+        <span>Xatolik</span>
+        <RefreshCw className="h-3 w-3" />
       </div>
     )
   }
 
   const displaySeconds = seconds ?? 0
-  const isLowTime = displaySeconds < 300 // Less than 5 minutes
-  const isCritical = displaySeconds < 60 // Less than 1 minute
+  const isLowTime = displaySeconds < EXAM_CONFIG.LOW_TIME_THRESHOLD_SECONDS
+  const isCritical = displaySeconds < EXAM_CONFIG.CRITICAL_TIME_THRESHOLD_SECONDS
 
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-lg px-4 py-2 font-mono text-lg font-semibold",
+        "flex items-center gap-2 rounded-lg px-4 py-2 font-mono text-lg font-semibold transition-colors",
         isLowTime && !isCritical && "bg-amber-100 text-amber-700",
         isCritical && "bg-red-100 text-red-700 animate-pulse",
         !isLowTime && "bg-muted text-foreground",
+        isSyncing && "opacity-75",
         className,
       )}
     >
-      <Clock className="h-5 w-5" />
+      <Clock className={cn("h-5 w-5", isSyncing && "animate-spin")} />
       <span>{formatTime(displaySeconds)}</span>
     </div>
   )

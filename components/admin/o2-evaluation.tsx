@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import useSWR, { mutate } from "swr"
-import { Loader2, ChevronLeft, ChevronRight, Save, Filter, CheckCircle } from "lucide-react"
+import { Loader2, ChevronLeft, ChevronRight, Save, Filter, CheckCircle, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { useToast } from "@/hooks/use-toast"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -38,6 +39,8 @@ export function O2Evaluation() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [score, setScore] = useState("")
   const [isSaving, setIsSaving] = useState(false)
+  const [scoreError, setScoreError] = useState<string | null>(null)
+  const { toast } = useToast()
 
   const { data: exams } = useSWR("/api/admin/exams", fetcher)
 
@@ -64,21 +67,42 @@ export function O2Evaluation() {
 
   const currentAnswer = o2Answers?.[currentIndex]
 
-  // Reset index when filters change
   useEffect(() => {
     setCurrentIndex(0)
     setScore("")
+    setScoreError(null)
   }, [selectedExamId, selectedTestCode, selectedQuestionPosition])
 
-  // Update score when navigating
   useEffect(() => {
     if (currentAnswer) {
       setScore(currentAnswer.teacher_score?.toString() || "")
+      setScoreError(null)
     }
   }, [currentAnswer])
 
+  const validateScore = (): boolean => {
+    if (!currentAnswer) return false
+
+    const numScore = Number.parseFloat(score)
+    if (isNaN(numScore)) {
+      setScoreError("Son kiriting")
+      return false
+    }
+    if (numScore < 0) {
+      setScoreError("Ball manfiy bo'lishi mumkin emas")
+      return false
+    }
+    if (numScore > currentAnswer.max_score) {
+      setScoreError(`Ball ${currentAnswer.max_score} dan oshmasligi kerak`)
+      return false
+    }
+    setScoreError(null)
+    return true
+  }
+
   const handleSaveScore = async () => {
     if (!currentAnswer || !score) return
+    if (!validateScore()) return
 
     setIsSaving(true)
     try {
@@ -93,20 +117,25 @@ export function O2Evaluation() {
 
       mutate(buildQueryUrl())
 
-      // Move to next answer if available
+      toast({
+        title: "Saqlandi",
+        description: `${currentAnswer.student_name} - ${currentAnswer.question_number}-savol: ${score} ball`,
+      })
+
       if (currentIndex < (o2Answers?.length || 0) - 1) {
         setCurrentIndex(currentIndex + 1)
         setScore("")
       }
     } catch (error) {
       console.error("Error saving score:", error)
+      toast({
+        title: "Xatolik",
+        description: "Ballni saqlashda xatolik yuz berdi",
+        variant: "destructive",
+      })
     } finally {
       setIsSaving(false)
     }
-  }
-
-  const handleSaveAndNext = async () => {
-    await handleSaveScore()
   }
 
   const handlePrevious = () => {
@@ -124,8 +153,8 @@ export function O2Evaluation() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-foreground">O2 baholash</h1>
-        <p className="text-muted-foreground">41-43 savollarning javoblarini baholash</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">O2 baholash</h1>
+        <p className="text-sm text-muted-foreground">41-43 savollarning javoblarini baholash</p>
       </div>
 
       <Card>
@@ -136,7 +165,7 @@ export function O2Evaluation() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Imtihon</Label>
               <Select value={selectedExamId} onValueChange={setSelectedExamId}>
@@ -194,14 +223,12 @@ export function O2Evaluation() {
         </CardContent>
       </Card>
 
-      {/* Navigation and count */}
+      {/* Navigation */}
       {o2Answers && o2Answers.length > 0 && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-sm">
-              Baholanmagan: {o2Answers.length} ta javob
-            </Badge>
-          </div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <Badge variant="secondary" className="text-sm">
+            Baholanmagan: {o2Answers.length} ta javob
+          </Badge>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={handlePrevious} disabled={currentIndex === 0}>
               <ChevronLeft className="h-4 w-4" />
@@ -243,7 +270,7 @@ export function O2Evaluation() {
           {/* Question section */}
           <Card>
             <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <CardTitle className="text-lg">Savol</CardTitle>
                 <Badge variant="outline">#{currentAnswer.question_number}-savol</Badge>
               </div>
@@ -285,7 +312,6 @@ export function O2Evaluation() {
               <CardTitle className="text-lg">Talaba javobi</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Student images */}
               {currentAnswer.image_urls && currentAnswer.image_urls.length > 0 ? (
                 <div>
                   <Label className="text-sm text-muted-foreground mb-3 block">Yuklangan rasmlar</Label>
@@ -311,28 +337,40 @@ export function O2Evaluation() {
 
               {/* Scoring section */}
               <div className="space-y-4">
-                <Label className="text-base font-medium">Baholash</Label>
-                <div className="flex items-end gap-4">
-                  <div className="flex-1">
-                    <Label className="text-sm text-muted-foreground mb-2 block">
-                      Ball (max {currentAnswer.max_score})
-                    </Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max={currentAnswer.max_score}
-                      step="0.5"
-                      value={score}
-                      onChange={(e) => setScore(e.target.value)}
-                      placeholder="Ball kiriting..."
-                      className="text-lg h-12"
-                    />
-                  </div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-medium">Baholash</Label>
+                  <Badge variant="outline" className="text-base px-3 py-1">
+                    Max: {currentAnswer.max_score} ball
+                  </Badge>
+                </div>
+
+                <div className="space-y-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    max={currentAnswer.max_score}
+                    step="0.5"
+                    value={score}
+                    onChange={(e) => {
+                      setScore(e.target.value)
+                      setScoreError(null)
+                    }}
+                    placeholder="Ball kiriting..."
+                    className={`text-lg h-12 ${scoreError ? "border-destructive" : ""}`}
+                  />
+                  {scoreError && (
+                    <div className="flex items-center gap-2 text-destructive text-sm">
+                      <AlertCircle className="h-4 w-4" />
+                      {scoreError}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3">
                   <Button
-                    onClick={handleSaveScore}
+                    onClick={() => {
+                      if (validateScore()) handleSaveScore()
+                    }}
                     disabled={isSaving || !score}
                     variant="outline"
                     className="flex-1 bg-transparent"
@@ -341,7 +379,9 @@ export function O2Evaluation() {
                     Saqlash
                   </Button>
                   <Button
-                    onClick={handleSaveAndNext}
+                    onClick={() => {
+                      if (validateScore()) handleSaveScore()
+                    }}
                     disabled={isSaving || !score || currentIndex >= (o2Answers?.length || 0) - 1}
                     className="flex-1"
                   >

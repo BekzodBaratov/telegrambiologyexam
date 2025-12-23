@@ -1,28 +1,40 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
+const SESSION_COOKIE_NAME = "admin_session"
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Protect admin routes (except login page)
-  if (pathname.startsWith("/admin") && pathname !== "/admin") {
-    const session = request.cookies.get("admin_session")
+  // Add security headers to all responses
+  const response = NextResponse.next()
+  response.headers.set("X-Content-Type-Options", "nosniff")
+  response.headers.set("X-Frame-Options", "DENY")
+  response.headers.set("X-XSS-Protection", "1; mode=block")
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
 
-    if (!session) {
+  // Protect admin routes (except login page at /admin)
+  if (pathname.startsWith("/admin") && pathname !== "/admin") {
+    const session = request.cookies.get(SESSION_COOKIE_NAME)
+
+    if (!session?.value) {
       return NextResponse.redirect(new URL("/admin", request.url))
     }
+
+    // Note: Full session validation happens in the API route
+    // Middleware only does a basic check for cookie presence
   }
 
   // Protect admin API routes
   if (pathname.startsWith("/api/admin")) {
-    const session = request.cookies.get("admin_session")
+    const session = request.cookies.get(SESSION_COOKIE_NAME)
 
-    if (!session) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+    if (!session?.value) {
+      return NextResponse.json({ message: "Ruxsat yo'q. Iltimos, tizimga kiring." }, { status: 401 })
     }
   }
 
-  return NextResponse.next()
+  return response
 }
 
 export const config = {

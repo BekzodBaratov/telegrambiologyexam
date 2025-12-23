@@ -7,8 +7,8 @@ import { QuestionY1 } from "./question-y1"
 import { QuestionY2Group } from "./question-y2-group"
 import { QuestionO1 } from "./question-o1"
 import { Button } from "@/components/ui/button"
-import { useExamStore } from "@/lib/exam-store"
-import { ChevronLeft, ChevronRight, Flag, Loader2, WifiOff } from "lucide-react"
+import { useExamStore, useDebouncedAnswerSave } from "@/lib/exam-store"
+import { ChevronLeft, ChevronRight, Flag, Loader2, WifiOff, CloudOff } from "lucide-react"
 import useSWR from "swr"
 import {
   AlertDialog,
@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 interface ExamPart1Props {
   examId: number
@@ -58,16 +59,17 @@ interface DisplayItem {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
-export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpired }: ExamPart1Props) {
+function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpired }: ExamPart1Props) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [showFinishDialog, setShowFinishDialog] = useState(false)
   const [showLeaveWarning, setShowLeaveWarning] = useState(false)
   const [showTimeUpDialog, setShowTimeUpDialog] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [networkError, setNetworkError] = useState(false)
+  const [isOnline, setIsOnline] = useState(true)
   const examStore = useExamStore()
-  const autosaveRef = useRef<NodeJS.Timeout | null>(null)
   const answersRestoredRef = useRef(false)
+
+  const { queueAnswer, flush, isSaving, lastSaveError, pendingCount } = useDebouncedAnswerSave(attemptId)
 
   const {
     data: questions,
@@ -75,6 +77,8 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
     error: questionsError,
   } = useSWR<Question[]>(`/api/student/questions?examId=${examId}&part=1&attemptId=${attemptId}`, fetcher, {
     revalidateOnFocus: false,
+    errorRetryCount: 3,
+    errorRetryInterval: 2000,
   })
 
   const displayItems: DisplayItem[] = useMemo(() => {
@@ -113,7 +117,25 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
   const currentItem = displayItems[currentIndex]
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+    setIsOnline(navigator.onLine)
+
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
+  }, [])
+
+  useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Flush pending answers before leaving
+      if (pendingCount > 0) {
+        flush()
+      }
       e.preventDefault()
       e.returnValue = "Test tugallanmagan. Sahifani tark etmoqchimisiz?"
       return e.returnValue
@@ -133,7 +155,7 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
       window.removeEventListener("beforeunload", handleBeforeUnload)
       window.removeEventListener("popstate", handlePopState)
     }
-  }, [])
+  }, [pendingCount, flush])
 
   useEffect(() => {
     if (answersRestoredRef.current) return
@@ -144,15 +166,14 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
         if (response.ok) {
           const data = await response.json()
           if (data.savedAnswers && data.savedAnswers.length > 0) {
-            data.savedAnswers.forEach((sa: { questionId: number; answer: string; imageUrls?: string[] }) => {
-              if (sa.answer) {
-                examStore.saveAnswer({
-                  questionId: sa.questionId,
-                  answer: sa.answer,
-                  imageUrls: sa.imageUrls,
-                })
-              }
-            })
+            // Use bulk restore for efficiency
+            examStore.bulkRestoreAnswers(
+              data.savedAnswers.map((sa: { questionId: number; answer: string; imageUrls?: string[] }) => ({
+                questionId: sa.questionId,
+                answer: sa.answer,
+                imageUrls: sa.imageUrls,
+              })),
+            )
           }
           answersRestoredRef.current = true
         }
@@ -164,55 +185,25 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
     restoreAnswers()
   }, [attemptId, examStore])
 
-  useEffect(() => {
-    autosaveRef.current = setInterval(async () => {
-      const answers = examStore.answers.filter((a) => {
-        const q = questions?.find((q) => q.id === a.questionId)
-        return q && q.question_number <= 40
-      })
-
-      if (answers.length > 0) {
-        try {
-          const response = await fetch("/api/student/save-answers-batch", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ attemptId, answers }),
-          })
-          if (response.ok) {
-            setNetworkError(false)
-          } else {
-            setNetworkError(true)
-          }
-        } catch {
-          setNetworkError(true)
-        }
-      }
-    }, 5000)
-
-    return () => {
-      if (autosaveRef.current) {
-        clearInterval(autosaveRef.current)
-      }
-    }
-  }, [attemptId, examStore.answers, questions])
-
   const handleAnswerChange = useCallback(
     (questionId: number, answer: string) => {
-      examStore.saveAnswer({
-        questionId,
-        answer,
-      })
+      const answerData = { questionId, answer }
+      examStore.saveAnswer(answerData)
+      queueAnswer(answerData)
     },
-    [examStore],
+    [examStore, queueAnswer],
   )
 
   const handleTimeUp = useCallback(async () => {
+    // Flush any pending answers before time up
+    await flush()
     setShowTimeUpDialog(true)
-  }, [])
+  }, [flush])
 
   const handleTimeUpConfirm = async () => {
     setIsSubmitting(true)
     try {
+      await flush() // Ensure all answers are saved
       await fetch("/api/student/finish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -221,7 +212,6 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
       setShowTimeUpDialog(false)
       onComplete()
     } catch {
-      setNetworkError(true)
       setIsSubmitting(false)
     }
   }
@@ -229,6 +219,7 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
   const handleFinish = async () => {
     setIsSubmitting(true)
     try {
+      await flush() // Ensure all answers are saved
       await fetch("/api/student/finish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -237,7 +228,6 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
       setShowFinishDialog(false)
       onComplete()
     } catch {
-      setNetworkError(true)
       setIsSubmitting(false)
     }
   }
@@ -245,6 +235,7 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
   const handleForceLeave = async () => {
     setIsSubmitting(true)
     try {
+      await flush() // Ensure all answers are saved
       await fetch("/api/student/finish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -253,7 +244,6 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
       setShowLeaveWarning(false)
       onComplete()
     } catch {
-      setNetworkError(true)
       setIsSubmitting(false)
     }
   }
@@ -371,10 +361,35 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
         onTimeUp={handleTimeUp}
       />
 
-      {networkError && (
-        <div className="bg-amber-100 border-b border-amber-200 px-4 py-2 text-sm text-amber-800 flex items-center gap-2">
-          <WifiOff className="h-4 w-4" />
-          <span>Internet aloqasi yo'q. Javoblar saqlanmayapti.</span>
+      {(!isOnline || lastSaveError || isSaving || pendingCount > 0) && (
+        <div
+          className={`border-b px-4 py-2 text-sm flex items-center gap-2 ${
+            !isOnline || lastSaveError
+              ? "bg-amber-100 border-amber-200 text-amber-800"
+              : "bg-blue-50 border-blue-200 text-blue-700"
+          }`}
+        >
+          {!isOnline ? (
+            <>
+              <CloudOff className="h-4 w-4" />
+              <span>Internet aloqasi yo'q. Javoblar saqlanmayapti.</span>
+            </>
+          ) : lastSaveError ? (
+            <>
+              <WifiOff className="h-4 w-4" />
+              <span>Javoblarni saqlashda xatolik. Qayta urinilmoqda...</span>
+            </>
+          ) : isSaving ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Saqlanmoqda...</span>
+            </>
+          ) : pendingCount > 0 ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>{pendingCount} ta javob saqlanmoqda...</span>
+            </>
+          ) : null}
         </div>
       )}
 
@@ -489,5 +504,13 @@ export function ExamPart1({ examId, attemptId, examName, onComplete, onTimeExpir
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+export function ExamPart1(props: ExamPart1Props) {
+  return (
+    <ErrorBoundary>
+      <ExamPart1Content {...props} />
+    </ErrorBoundary>
   )
 }

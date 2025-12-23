@@ -1,30 +1,60 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
+import { getPaginationFromRequest, createPaginatedResponse } from "@/lib/api-cache"
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const subjectId = searchParams.get("subjectId")
+    const typeCode = searchParams.get("type")
+    const sectionId = searchParams.get("sectionId")
+    const paginated = searchParams.get("paginated") === "true"
 
-    let questions
-    if (subjectId) {
-      questions = await sql`
-        SELECT q.*, qt.code as question_type_code, s.title as section_title, s.subject_id
+    // Build conditions
+    const conditions: string[] = []
+    if (subjectId) conditions.push(`s.subject_id = ${subjectId}`)
+    if (typeCode && typeCode !== "all") conditions.push(`qt.code = '${typeCode}'`)
+    if (sectionId && sectionId !== "all") conditions.push(`q.section_id = ${sectionId}`)
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""
+
+    if (paginated) {
+      const pagination = getPaginationFromRequest(request.url)
+
+      // Get total count
+      const countResult = await sql`
+        SELECT COUNT(*) as total
         FROM questions q
         LEFT JOIN question_types qt ON q.question_type_id = qt.id
         LEFT JOIN sections s ON q.section_id = s.id
-        WHERE s.subject_id = ${subjectId}
-        ORDER BY q.question_number
+        ${whereClause ? sql.unsafe(whereClause) : sql``}
       `
-    } else {
-      questions = await sql`
+      const total = Number.parseInt(countResult[0]?.total || "0", 10)
+
+      const offset = (pagination.page - 1) * pagination.limit
+      const questions = await sql`
         SELECT q.*, qt.code as question_type_code, s.title as section_title
         FROM questions q
         LEFT JOIN question_types qt ON q.question_type_id = qt.id
         LEFT JOIN sections s ON q.section_id = s.id
+        ${whereClause ? sql.unsafe(whereClause) : sql``}
         ORDER BY q.question_number
+        LIMIT ${pagination.limit}
+        OFFSET ${offset}
       `
+
+      return NextResponse.json(createPaginatedResponse(questions, total, pagination))
     }
+
+    // Non-paginated (for backward compatibility)
+    const questions = await sql`
+      SELECT q.*, qt.code as question_type_code, s.title as section_title
+      FROM questions q
+      LEFT JOIN question_types qt ON q.question_type_id = qt.id
+      LEFT JOIN sections s ON q.section_id = s.id
+      ${whereClause ? sql.unsafe(whereClause) : sql``}
+      ORDER BY q.question_number
+    `
 
     return NextResponse.json(questions)
   } catch (error) {

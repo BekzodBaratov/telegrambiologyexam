@@ -21,7 +21,7 @@ interface RaschQuestionResult {
   questionText: string
   totalAttempts: number
   correctAttempts: number
-  correctPercent: number
+  correctPercent: number | null
   raschBall: number
 }
 
@@ -95,8 +95,8 @@ export function RaschCalculator() {
     }
   }
 
-  const handleExport = () => {
-    if (!results) return
+  const exportToCsv = () => {
+    if (!results || !results.length) return
 
     const csv = [
       ["Savol №", "Turi", "Savol matni", "Jami urinishlar", "To'g'ri javoblar", "Foiz (%)", "Rasch ball"].join(","),
@@ -107,7 +107,7 @@ export function RaschCalculator() {
           `"${r.questionText.replace(/"/g, '""')}"`,
           r.totalAttempts,
           r.correctAttempts,
-          r.correctPercent.toFixed(2),
+          r.correctPercent != null && typeof r.correctPercent === "number" ? r.correctPercent.toFixed(2) : "0.00",
           r.raschBall,
         ].join(","),
       ),
@@ -203,7 +203,7 @@ export function RaschCalculator() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold">Natijalar ({results.length} ta savol)</h3>
-                <Button variant="outline" size="sm" onClick={handleExport}>
+                <Button variant="outline" size="sm" onClick={exportToCsv}>
                   <Download className="h-4 w-4 mr-2" />
                   CSV yuklash
                 </Button>
@@ -229,18 +229,17 @@ export function RaschCalculator() {
                         <TableCell>
                           <Badge variant="outline">{result.questionType}</Badge>
                         </TableCell>
-                        <TableCell className="max-w-xs truncate" title={result.questionText}>
+                        <TableCell className="max-w-[300px] truncate" title={result.questionText}>
                           {result.questionText}
                         </TableCell>
                         <TableCell className="text-right">{result.totalAttempts}</TableCell>
                         <TableCell className="text-right">{result.correctAttempts}</TableCell>
-                        <TableCell className="text-right font-mono">{result.correctPercent.toFixed(1)}%</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant={getRaschBadgeVariant(result.raschBall)}>
-                            {result.raschBall > 0 ? `+${result.raschBall}` : result.raschBall}
-                          </Badge>
-                          <div className="text-xs text-muted-foreground mt-1">{getRaschLabel(result.raschBall)}</div>
+                        <TableCell className="text-right font-mono">
+                          {result.correctPercent != null && typeof result.correctPercent === "number"
+                            ? `${result.correctPercent.toFixed(1)}%`
+                            : "—"}
                         </TableCell>
+                        <TableCell className="text-right font-mono font-bold">{result.raschBall}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

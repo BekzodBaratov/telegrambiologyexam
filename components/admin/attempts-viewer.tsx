@@ -3,16 +3,14 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
-import { Eye, Loader2, Search, ChevronLeft, ChevronRight, Users, AlertCircle, Clock, FileCheck2 } from "lucide-react"
+import { Eye, Search, ChevronLeft, ChevronRight, Users, AlertCircle, FileCheck2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -26,34 +24,25 @@ interface Attempt {
   exam_id: number
   student_name: string
   telegram_id: string
-  region?: string
-  district?: string
-  phone?: string
   exam_name: string
   code_used: string
   status: string
   started_at: string
   finished_at: string | null
-  part1_started_at: string | null
-  part1_finished_at: string | null
-  part2_started_at: string | null
-  part2_finished_at: string | null
-  total_score: number | null
   final_score: number | null
   certificate_level: string | null
-  y1_score: number
-  y2_score: number
-  o1_score: number
-  o2_score: number
   has_o2: boolean
   o2_fully_checked: boolean
-  rasch_score: number | null
-  test_duration: number
-  written_duration: number
-  total_questions: number
-  correct_count: number
-  incorrect_count: number
-  unanswered_count: number
+}
+
+interface PaginatedResponse {
+  data: Attempt[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
 }
 
 interface Answer {
@@ -68,8 +57,9 @@ interface Answer {
   teacher_score: number | null
 }
 
-function getCertificateLevel(percentage: number | null): { level: string; color: string } | null {
-  if (percentage === null) return null
+function getCertificateLevel(percentage: number | null | undefined): { level: string; color: string } | null {
+  if (percentage === null || percentage === undefined || typeof percentage !== "number" || isNaN(percentage))
+    return null
   if (percentage >= 90) return { level: "A+", color: "bg-emerald-500 text-white" }
   if (percentage >= 80) return { level: "A", color: "bg-green-500 text-white" }
   if (percentage >= 70) return { level: "B", color: "bg-blue-500 text-white" }
@@ -77,29 +67,45 @@ function getCertificateLevel(percentage: number | null): { level: string; color:
   return null
 }
 
+function formatPercentage(value: number | null | undefined): string {
+  if (value === null || value === undefined || typeof value !== "number" || isNaN(value)) {
+    return "—"
+  }
+  return `${value.toFixed(1)}%`
+}
+
 export function AttemptsViewer() {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [selectedAttempt, setSelectedAttempt] = useState<Attempt | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
 
-  const { data: attempts, isLoading } = useSWR<Attempt[]>("/api/admin/attempts", fetcher)
+  const { data: response, isLoading } = useSWR<PaginatedResponse>(
+    `/api/admin/attempts?page=${currentPage}&limit=${ITEMS_PER_PAGE}${debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : ""}`,
+    fetcher,
+  )
+
   const { data: answers, isLoading: loadingAnswers } = useSWR<Answer[]>(
     selectedAttempt ? `/api/admin/answers/${selectedAttempt.id}` : null,
     fetcher,
   )
 
-  const filteredAttempts =
-    attempts?.filter(
-      (a) =>
-        a.student_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        a.telegram_id?.includes(searchTerm) ||
-        a.code_used?.includes(searchTerm),
-    ) || []
+  const attempts = response?.data || []
+  const pagination = response?.pagination
+  const totalPages = pagination?.totalPages || 1
 
-  const totalPages = Math.ceil(filteredAttempts.length / ITEMS_PER_PAGE)
-  const paginatedAttempts = filteredAttempts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value)
+    // Reset to page 1 when searching
+    setCurrentPage(1)
+    // Debounce the actual search
+    const timeoutId = setTimeout(() => {
+      setDebouncedSearch(value)
+    }, 300)
+    return () => clearTimeout(timeoutId)
+  }
 
   const handleViewDetails = (attempt: Attempt) => {
     setSelectedAttempt(attempt)
@@ -114,536 +120,356 @@ export function AttemptsViewer() {
         </Badge>
       )
     }
-    if (status === "completed" && hasO2 && !o2FullyChecked) {
+    if (status === "finished" && hasO2 && !o2FullyChecked) {
       return (
-        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
           O2 kutilmoqda
         </Badge>
       )
     }
-    if (status === "completed") {
-      return (
-        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
-          Tugallangan
-        </Badge>
-      )
-    }
     return (
-      <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-300">
-        {status}
+      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+        Yakunlangan
       </Badge>
     )
   }
 
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 768
+  const formatDateTime = (dateString: string | null) => {
+    if (!dateString) return "—"
+    return new Date(dateString).toLocaleString("uz-UZ", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  const calculatePercentage = (attempt: Attempt): number | null => {
+    if (attempt.final_score === null || attempt.final_score === undefined) return null
+    if (typeof attempt.final_score !== "number" || isNaN(attempt.final_score)) return null
+    if (attempt.has_o2 && !attempt.o2_fully_checked) return null
+    // Assuming max score is 100 for percentage calculation
+    return attempt.final_score
+  }
+
+  // Loading skeleton
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between gap-4">
+          <div>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+          <Skeleton className="h-10 w-full sm:w-64" />
+        </div>
+        <Card>
+          <CardContent className="p-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 py-4 border-b last:border-b-0">
+                <Skeleton className="h-10 w-10 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <Skeleton className="h-6 w-16" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Empty state
+  if (attempts.length === 0 && !debouncedSearch) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Urinishlar</h1>
+          <p className="text-sm text-muted-foreground">Talabalarning imtihon urinishlari</p>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Users className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium mb-2">Hali urinishlar yo&apos;q</h3>
+            <p className="text-sm text-muted-foreground text-center">
+              Talabalar imtihon topshirganda, natijalar shu yerda ko&apos;rinadi
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Urinishlar</h1>
-        <p className="text-sm text-muted-foreground">Barcha imtihon urinishlari va natijalar</p>
-      </div>
-
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Urinishlar</h1>
+          <p className="text-sm text-muted-foreground">Talabalarning imtihon urinishlari</p>
+        </div>
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Ism, Telegram ID yoki kod..."
+            placeholder="Talaba nomi..."
             value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value)
-              setCurrentPage(1)
-            }}
-            className="pl-10"
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-9"
           />
         </div>
-        {filteredAttempts.length > 0 && (
-          <div className="text-sm text-muted-foreground flex items-center gap-2">
-            <FileCheck2 className="h-4 w-4" />
-            {filteredAttempts.length} ta urinish
-          </div>
-        )}
       </div>
 
+      {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Talaba</TableHead>
-                  <TableHead className="hidden md:table-cell">Imtihon</TableHead>
-                  <TableHead className="text-center">Yakuniy ball</TableHead>
-                  <TableHead className="text-center hidden sm:table-cell">Foiz</TableHead>
-                  <TableHead className="text-center hidden lg:table-cell">Sertifikat</TableHead>
-                  <TableHead className="hidden sm:table-cell">Holat</TableHead>
-                  <TableHead className="w-16"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-3 w-20 mt-1" />
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-16 mx-auto" />
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <Skeleton className="h-4 w-12 mx-auto" />
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        <Skeleton className="h-6 w-12 mx-auto" />
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <Skeleton className="h-6 w-20" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-8 w-8" />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : filteredAttempts.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-16 text-muted-foreground">
-                      <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                      <p className="text-base font-medium">Urinishlar topilmadi</p>
-                      <p className="text-sm mt-1">Qidiruv so'rovingizni o'zgartiring</p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Talaba</TableHead>
+                <TableHead className="hidden md:table-cell">Imtihon</TableHead>
+                <TableHead>Ball</TableHead>
+                <TableHead className="hidden sm:table-cell">Foiz</TableHead>
+                <TableHead className="hidden sm:table-cell">Sertifikat</TableHead>
+                <TableHead>Holat</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {attempts.map((attempt) => {
+                const percentage = calculatePercentage(attempt)
+                const certificate = getCertificateLevel(percentage)
+                const isPending = attempt.has_o2 && !attempt.o2_fully_checked
+
+                return (
+                  <TableRow key={attempt.id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{attempt.student_name}</p>
+                        <p className="text-xs text-muted-foreground">{attempt.telegram_id}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <div>
+                        <p className="text-sm">{attempt.exam_name}</p>
+                        <p className="text-xs text-muted-foreground">{attempt.code_used}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {attempt.status === "in_progress" ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : isPending ? (
+                        <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200">
+                          O2 kutilmoqda
+                        </Badge>
+                      ) : (
+                        <span className="font-medium">{attempt.final_score ?? "—"}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">{formatPercentage(percentage)}</TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      {certificate ? (
+                        <Badge className={certificate.color}>{certificate.level}</Badge>
+                      ) : isPending ? (
+                        <span className="text-xs text-muted-foreground">Berilmagan</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{getStatusBadge(attempt.status, attempt.has_o2, attempt.o2_fully_checked)}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" onClick={() => handleViewDetails(attempt)}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
-                ) : (
-                  paginatedAttempts.map((attempt) => {
-                    // Calculate final score and percentage
-                    const hasPendingO2 = attempt.has_o2 && !attempt.o2_fully_checked
-                    const finalScore = hasPendingO2 ? null : (attempt.final_score ?? attempt.total_score)
-                    const percentage = finalScore !== null ? Math.round((finalScore / 100) * 1000) / 10 : null
-                    const cert = getCertificateLevel(percentage)
+                )
+              })}
+            </TableBody>
+          </Table>
 
-                    return (
-                      <TableRow key={attempt.id} className="h-16">
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{attempt.student_name || "Noma'lum"}</span>
-                            <span className="text-xs text-muted-foreground">ID: {attempt.telegram_id}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                          {attempt.exam_name}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {hasPendingO2 ? (
-                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
-                              O2 kutilmoqda
-                            </Badge>
-                          ) : finalScore !== null ? (
-                            <span className="font-semibold text-base">{finalScore.toFixed(1)}</span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center hidden sm:table-cell text-muted-foreground">
-                          {hasPendingO2 ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : percentage !== null ? (
-                            <span className="font-medium">{percentage}%</span>
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center hidden lg:table-cell">
-                          {hasPendingO2 ? (
-                            <Badge variant="outline" className="bg-gray-100 text-gray-600">
-                              Berilmagan
-                            </Badge>
-                          ) : cert ? (
-                            <Badge className={cert.color}>{cert.level}</Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-gray-100 text-gray-600">
-                              Berilmagan
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell">
-                          {getStatusBadge(attempt.status, attempt.has_o2, attempt.o2_fully_checked)}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleViewDetails(attempt)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <p className="text-sm text-muted-foreground">
+                Sahifa {currentPage} / {totalPages}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Sahifa {currentPage} / {totalPages}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Details Sheet (mobile) */}
-      <Sheet open={isDialogOpen && isMobile} onOpenChange={setIsDialogOpen}>
-        <SheetContent side="bottom" className="h-[90vh] overflow-y-auto sm:hidden">
+      {/* Details Sheet */}
+      <Sheet open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>{selectedAttempt?.student_name || "Talaba"}</SheetTitle>
-            <SheetDescription>Imtihon natijalari va batafsil ma'lumot</SheetDescription>
+            <SheetTitle>Urinish tafsilotlari</SheetTitle>
+            <SheetDescription>Talabaning imtihon natijalari</SheetDescription>
           </SheetHeader>
+
           {selectedAttempt && (
-            <AttemptDetails
-              attempt={selectedAttempt}
-              answers={answers}
-              loadingAnswers={loadingAnswers}
-              onGoToO2={() => {
-                setIsDialogOpen(false)
-                router.push("/admin/o2-evaluation")
-              }}
-            />
+            <div className="mt-6 space-y-6">
+              {/* Pending O2 Warning */}
+              {selectedAttempt.has_o2 && !selectedAttempt.o2_fully_checked && (
+                <Alert className="border-orange-200 bg-orange-50">
+                  <AlertCircle className="h-4 w-4 text-orange-600" />
+                  <AlertDescription className="text-orange-800">
+                    Bu urinish O2 baholashni kutmoqda. Yakuniy natija O2 tekshirilgandan keyin aniqlanadi.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Student Info */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">Talaba ma&apos;lumotlari</h4>
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Ism</span>
+                    <span className="text-sm font-medium">{selectedAttempt.student_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Telegram ID</span>
+                    <span className="text-sm font-medium">{selectedAttempt.telegram_id}</span>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Exam Info */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">Imtihon ma&apos;lumotlari</h4>
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Imtihon</span>
+                    <span className="text-sm font-medium">{selectedAttempt.exam_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Test kodi</span>
+                    <span className="text-sm font-medium">{selectedAttempt.code_used}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Boshlangan</span>
+                    <span className="text-sm font-medium">{formatDateTime(selectedAttempt.started_at)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Tugallangan</span>
+                    <span className="text-sm font-medium">{formatDateTime(selectedAttempt.finished_at)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Score Breakdown */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">Natijalar</h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <p className="text-2xl font-bold">
+                        {selectedAttempt.has_o2 && !selectedAttempt.o2_fully_checked
+                          ? "—"
+                          : (selectedAttempt.final_score ?? "—")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Yakuniy ball</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <p className="text-2xl font-bold">{formatPercentage(calculatePercentage(selectedAttempt))}</p>
+                      <p className="text-xs text-muted-foreground">Foiz</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      {(() => {
+                        const cert = getCertificateLevel(calculatePercentage(selectedAttempt))
+                        return cert ? (
+                          <Badge className={`text-lg ${cert.color}`}>{cert.level}</Badge>
+                        ) : (
+                          <span className="text-2xl font-bold text-muted-foreground">—</span>
+                        )
+                      })()}
+                      <p className="text-xs text-muted-foreground mt-1">Sertifikat</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Answers Summary */}
+              {loadingAnswers ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-20 w-full" />
+                </div>
+              ) : answers && answers.length > 0 ? (
+                <div>
+                  <h4 className="text-sm font-medium mb-3">Javoblar</h4>
+                  <div className="grid grid-cols-4 gap-2 text-center text-sm">
+                    <div className="bg-muted/50 rounded p-3">
+                      <p className="text-lg font-bold">{answers.length}</p>
+                      <p className="text-xs text-muted-foreground">Jami</p>
+                    </div>
+                    <div className="bg-green-50 rounded p-3">
+                      <p className="text-lg font-bold text-green-600">
+                        {answers.filter((a) => a.is_correct === true).length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">To&apos;g&apos;ri</p>
+                    </div>
+                    <div className="bg-red-50 rounded p-3">
+                      <p className="text-lg font-bold text-red-600">
+                        {answers.filter((a) => a.is_correct === false).length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Noto&apos;g&apos;ri</p>
+                    </div>
+                    <div className="bg-gray-50 rounded p-3">
+                      <p className="text-lg font-bold text-gray-600">
+                        {answers.filter((a) => a.answer === null || a.answer === "").length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Javobsiz</p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* O2 Evaluation Button */}
+              {selectedAttempt.has_o2 && !selectedAttempt.o2_fully_checked && (
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    setIsDialogOpen(false)
+                    router.push(`/admin/dashboard?tab=evaluation`)
+                  }}
+                >
+                  <FileCheck2 className="mr-2 h-4 w-4" />
+                  O2 baholashga o&apos;tish
+                </Button>
+              )}
+            </div>
           )}
         </SheetContent>
       </Sheet>
-
-      {/* Details Dialog (desktop) */}
-      <Dialog open={isDialogOpen && !isMobile} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto hidden sm:block">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">{selectedAttempt?.student_name || "Talaba"} - Batafsil</DialogTitle>
-          </DialogHeader>
-          {selectedAttempt && (
-            <AttemptDetails
-              attempt={selectedAttempt}
-              answers={answers}
-              loadingAnswers={loadingAnswers}
-              onGoToO2={() => {
-                setIsDialogOpen(false)
-                router.push("/admin/o2-evaluation")
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
-}
-
-function AttemptDetails({
-  attempt,
-  answers,
-  loadingAnswers,
-  onGoToO2,
-}: {
-  attempt: Attempt
-  answers?: Answer[]
-  loadingAnswers: boolean
-  onGoToO2: () => void
-}) {
-  const hasPendingO2 = attempt.has_o2 && !attempt.o2_fully_checked
-  const finalScore = hasPendingO2 ? null : (attempt.final_score ?? attempt.total_score)
-  const percentage = finalScore !== null ? Math.round((finalScore / 100) * 1000) / 10 : null
-  const cert = getCertificateLevel(percentage)
-
-  // Calculate time spent
-  const timeSpent = attempt.finished_at
-    ? Math.round((new Date(attempt.finished_at).getTime() - new Date(attempt.started_at).getTime()) / 60000)
-    : null
-
-  return (
-    <div className="space-y-6 pt-4">
-      {/* Pending O2 Warning */}
-      {hasPendingO2 && (
-        <Alert className="border-amber-300 bg-amber-50">
-          <AlertCircle className="h-4 w-4 text-amber-600" />
-          <AlertDescription className="text-amber-800">
-            Bu urinish uchun O2 baholash tugallanishi kerak. Yakuniy natija O2 baholangandan so'ng ko'rsatiladi.
-          </AlertDescription>
-          <Button variant="outline" size="sm" onClick={onGoToO2} className="mt-3 bg-white border-amber-400">
-            O2 baholashga o'tish
-          </Button>
-        </Alert>
-      )}
-
-      {/* A) Student Info */}
-      <Card>
-        <CardContent className="pt-6">
-          <Label className="text-base font-semibold mb-4 block">Talaba ma'lumotlari</Label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Ism-familiya:</span>
-              <p className="font-medium mt-1">{attempt.student_name}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Telegram ID:</span>
-              <p className="font-medium mt-1">{attempt.telegram_id}</p>
-            </div>
-            {attempt.region && (
-              <div>
-                <span className="text-muted-foreground">Viloyat:</span>
-                <p className="font-medium mt-1">{attempt.region}</p>
-              </div>
-            )}
-            {attempt.district && (
-              <div>
-                <span className="text-muted-foreground">Tuman:</span>
-                <p className="font-medium mt-1">{attempt.district}</p>
-              </div>
-            )}
-            {attempt.phone && (
-              <div>
-                <span className="text-muted-foreground">Telefon:</span>
-                <p className="font-medium mt-1">{attempt.phone}</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* B) Exam Info */}
-      <Card>
-        <CardContent className="pt-6">
-          <Label className="text-base font-semibold mb-4 block">Imtihon ma'lumotlari</Label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Imtihon nomi:</span>
-              <p className="font-medium mt-1">{attempt.exam_name}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Test kodi:</span>
-              <p className="font-medium mt-1">
-                <Badge variant="secondary">{attempt.code_used}</Badge>
-              </p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Boshlangan:</span>
-              <p className="font-medium mt-1">{new Date(attempt.started_at).toLocaleString("uz-UZ")}</p>
-            </div>
-            {attempt.finished_at && (
-              <div>
-                <span className="text-muted-foreground">Tugatilgan:</span>
-                <p className="font-medium mt-1">{new Date(attempt.finished_at).toLocaleString("uz-UZ")}</p>
-              </div>
-            )}
-            {timeSpent && (
-              <div>
-                <span className="text-muted-foreground">Umumiy davomiyligi:</span>
-                <p className="font-medium mt-1 flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" />
-                  {timeSpent} daqiqa
-                </p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* C) Score Breakdown */}
-      <Card>
-        <CardContent className="pt-6">
-          <Label className="text-base font-semibold mb-4 block">Balllar taqsimoti</Label>
-
-          {/* Component Scores */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
-              <p className="text-xs text-blue-700 font-medium mb-1">Y1</p>
-              <p className="text-2xl font-bold text-blue-900">{attempt.y1_score.toFixed(1)}</p>
-            </div>
-            <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg text-center">
-              <p className="text-xs text-purple-700 font-medium mb-1">Y2</p>
-              <p className="text-2xl font-bold text-purple-900">{attempt.y2_score.toFixed(1)}</p>
-            </div>
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-center">
-              <p className="text-xs text-green-700 font-medium mb-1">O1</p>
-              <p className="text-2xl font-bold text-green-900">{attempt.o1_score.toFixed(1)}</p>
-            </div>
-            <div
-              className={`p-4 rounded-lg text-center ${
-                hasPendingO2 ? "bg-amber-50 border border-amber-200" : "bg-orange-50 border border-orange-200"
-              }`}
-            >
-              <p className={`text-xs font-medium mb-1 ${hasPendingO2 ? "text-amber-700" : "text-orange-700"}`}>O2</p>
-              <p className={`text-2xl font-bold ${hasPendingO2 ? "text-amber-900" : "text-orange-900"}`}>
-                {hasPendingO2 ? "—" : attempt.o2_score.toFixed(1)}
-              </p>
-            </div>
-          </div>
-
-          <Separator className="my-4" />
-
-          {/* Combined Score */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="p-4 bg-muted rounded-lg text-center">
-              <p className="text-sm text-muted-foreground mb-1">Umumiy ball</p>
-              <p className="text-3xl font-bold">
-                {hasPendingO2 ? (
-                  <span className="text-amber-600">Kutilmoqda</span>
-                ) : finalScore !== null ? (
-                  finalScore.toFixed(1)
-                ) : (
-                  "—"
-                )}
-              </p>
-            </div>
-            <div className="p-4 bg-muted rounded-lg text-center">
-              <p className="text-sm text-muted-foreground mb-1">Foiz</p>
-              <p className="text-3xl font-bold">
-                {hasPendingO2 ? (
-                  <span className="text-amber-600">—</span>
-                ) : percentage !== null ? (
-                  `${percentage}%`
-                ) : (
-                  "—"
-                )}
-              </p>
-            </div>
-            <div className="p-4 bg-muted rounded-lg text-center">
-              <p className="text-sm text-muted-foreground mb-1">Sertifikat darajasi</p>
-              <p className="text-3xl font-bold">
-                {hasPendingO2 ? (
-                  <Badge variant="outline" className="text-base">
-                    Berilmagan
-                  </Badge>
-                ) : cert ? (
-                  <Badge className={`${cert.color} text-xl px-4 py-1`}>{cert.level}</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-base">
-                    Berilmagan
-                  </Badge>
-                )}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* D) Question Performance Summary */}
-      <Card>
-        <CardContent className="pt-6">
-          <Label className="text-base font-semibold mb-4 block">Savollarga javoblar xulasasi</Label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 border rounded-lg text-center">
-              <p className="text-xs text-muted-foreground mb-1">Jami savollar</p>
-              <p className="text-xl font-bold">{attempt.total_questions}</p>
-            </div>
-            <div className="p-3 border border-green-200 bg-green-50 rounded-lg text-center">
-              <p className="text-xs text-green-700 mb-1">To'g'ri javoblar</p>
-              <p className="text-xl font-bold text-green-900">{attempt.correct_count}</p>
-            </div>
-            <div className="p-3 border border-red-200 bg-red-50 rounded-lg text-center">
-              <p className="text-xs text-red-700 mb-1">Noto'g'ri javoblar</p>
-              <p className="text-xl font-bold text-red-900">{attempt.incorrect_count}</p>
-            </div>
-            <div className="p-3 border border-gray-200 bg-gray-50 rounded-lg text-center">
-              <p className="text-xs text-gray-700 mb-1">Javobsiz</p>
-              <p className="text-xl font-bold text-gray-900">{attempt.unanswered_count}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* E) Rasch Info */}
-      {attempt.rasch_score !== null && (
-        <Card>
-          <CardContent className="pt-6">
-            <Label className="text-base font-semibold mb-4 block">Rasch ma'lumotlari (Faqat o'qish)</Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-              <div className="p-3 border rounded-lg">
-                <span className="text-muted-foreground">Rasch balli:</span>
-                <p className="font-mono font-bold text-lg mt-1">{attempt.rasch_score.toFixed(4)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <Separator />
-
-      {/* Answers list */}
-      <div>
-        <Label className="text-base font-semibold mb-4 block">Barcha javoblar</Label>
-        {loadingAnswers ? (
-          <div className="py-12 text-center">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
-            <p className="text-sm text-muted-foreground mt-3">Javoblar yuklanmoqda...</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {answers?.map((answer) => (
-              <Card key={answer.id} className="overflow-hidden">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <Badge variant="secondary" className="font-mono">
-                          #{answer.question_number}
-                        </Badge>
-                        <Badge variant="outline">{answer.question_type_code}</Badge>
-                        {answer.is_correct === true && <Badge className="bg-green-500 text-white">To'g'ri</Badge>}
-                        {answer.is_correct === false && <Badge className="bg-red-500 text-white">Noto'g'ri</Badge>}
-                      </div>
-                      <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{answer.question_text}</p>
-                      <p className="font-medium text-sm">
-                        Javob: <span className="text-foreground">{answer.answer || "—"}</span>
-                      </p>
-                      {answer.image_urls && answer.image_urls.length > 0 && (
-                        <div className="mt-3 flex gap-2 flex-wrap">
-                          {answer.image_urls.map((url, i) => (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                              <img
-                                src={url || "/placeholder.svg"}
-                                alt={`Rasm ${i + 1}`}
-                                className="h-20 w-20 object-cover rounded border hover:opacity-80 transition-opacity"
-                              />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs text-muted-foreground">Ball</p>
-                      <p className="text-2xl font-bold">{answer.teacher_score ?? answer.score ?? "—"}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   )
 }

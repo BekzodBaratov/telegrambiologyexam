@@ -46,9 +46,6 @@ export async function GET(request: Request) {
         sa.certificate_level,
         s.full_name as student_name,
         s.telegram_id,
-        s.region,
-        s.district,
-        s.phone,
         e.name as exam_name,
         -- Simplified O2 check
         EXISTS (

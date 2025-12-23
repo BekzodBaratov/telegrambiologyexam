@@ -17,33 +17,28 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { useState, useEffect } from "react"
-
-interface AdminSidebarProps {
-  activeTab: string
-  onTabChange: (tab: string) => void
-}
+import { usePathname, useRouter } from "next/navigation"
+import Link from "next/link"
 
 const menuItems = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "sections", label: "Bo'limlar", icon: Layers },
-  { id: "questions", label: "Savollar", icon: BookOpen },
-  { id: "y2groups", label: "Guruhlar (Y2)", icon: FolderTree },
-  { id: "exams", label: "Imtihonlar", icon: FileText },
-  { id: "codes", label: "Test kodlari", icon: Key },
-  { id: "attempts", label: "Urinishlar", icon: Users },
-  { id: "evaluation", label: "O2 baholash", icon: FileCheck },
-  { id: "rasch", label: "Rasch hisoblash", icon: Calculator },
+  { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/sections", label: "Bo'limlar", icon: Layers },
+  { href: "/admin/questions", label: "Savollar", icon: BookOpen },
+  { href: "/admin/y2groups", label: "Guruhlar (Y2)", icon: FolderTree },
+  { href: "/admin/exams", label: "Imtihonlar", icon: FileText },
+  { href: "/admin/codes", label: "Test kodlari", icon: Key },
+  { href: "/admin/attempts", label: "Urinishlar", icon: Users },
+  { href: "/admin/evaluation", label: "O2 baholash", icon: FileCheck },
+  { href: "/admin/rasch", label: "Rasch hisoblash", icon: Calculator },
 ]
 
-function NavigationContent({ activeTab, onTabChange, onItemClick }: AdminSidebarProps & { onItemClick?: () => void }) {
+function NavigationContent({ onItemClick }: { onItemClick?: () => void }) {
+  const pathname = usePathname()
+  const router = useRouter()
+
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" })
-    window.location.href = "/admin"
-  }
-
-  const handleTabChange = (tab: string) => {
-    onTabChange(tab)
-    onItemClick?.()
+    router.push("/admin")
   }
 
   return (
@@ -54,17 +49,23 @@ function NavigationContent({ activeTab, onTabChange, onItemClick }: AdminSidebar
       </div>
 
       <nav className="space-y-1 flex-1">
-        {menuItems.map((item) => (
-          <Button
-            key={item.id}
-            variant={activeTab === item.id ? "secondary" : "ghost"}
-            className={cn("w-full justify-start", activeTab === item.id && "bg-secondary")}
-            onClick={() => handleTabChange(item.id)}
-          >
-            <item.icon className="mr-2 h-4 w-4" />
-            {item.label}
-          </Button>
-        ))}
+        {menuItems.map((item) => {
+          const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+          return (
+            <Button
+              key={item.href}
+              variant={isActive ? "secondary" : "ghost"}
+              className={cn("w-full justify-start", isActive && "bg-secondary")}
+              asChild
+              onClick={onItemClick}
+            >
+              <Link href={item.href}>
+                <item.icon className="mr-2 h-4 w-4" />
+                {item.label}
+              </Link>
+            </Button>
+          )
+        })}
       </nav>
 
       <Button
@@ -79,7 +80,8 @@ function NavigationContent({ activeTab, onTabChange, onItemClick }: AdminSidebar
   )
 }
 
-export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
+export function AdminSidebar() {
+  const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -91,6 +93,11 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
     window.addEventListener("resize", checkMobile)
     return () => window.removeEventListener("resize", checkMobile)
   }, [])
+
+  // Don't render sidebar on login page
+  if (pathname === "/admin") {
+    return null
+  }
 
   if (isMobile) {
     return (
@@ -108,11 +115,7 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
                 <SheetHeader className="sr-only">
                   <SheetTitle>Menu</SheetTitle>
                 </SheetHeader>
-                <NavigationContent
-                  activeTab={activeTab}
-                  onTabChange={onTabChange}
-                  onItemClick={() => setIsOpen(false)}
-                />
+                <NavigationContent onItemClick={() => setIsOpen(false)} />
               </SheetContent>
             </Sheet>
             <span className="font-semibold">Biologiya Admin</span>
@@ -126,7 +129,7 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
 
   return (
     <aside className="w-64 border-r bg-background p-4 flex flex-col sticky top-0 h-screen">
-      <NavigationContent activeTab={activeTab} onTabChange={onTabChange} />
+      <NavigationContent />
     </aside>
   )
 }

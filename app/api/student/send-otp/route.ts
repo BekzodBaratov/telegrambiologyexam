@@ -58,8 +58,9 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: "SMS yuborildi",
+      debugOtp: otpCode,
       // Only expose OTP in development
-      ...(process.env.NODE_ENV === "development" && { debugOtp: otpCode }),
+      // ...(process.env.NODE_ENV === "development" && { debugOtp: otpCode }),
     })
   } catch (error) {
     console.error("Send OTP error:", error)

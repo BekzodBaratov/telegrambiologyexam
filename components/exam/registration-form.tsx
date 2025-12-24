@@ -22,7 +22,7 @@ export function RegistrationForm({ telegramId, onComplete }: RegistrationFormPro
   const [error, setError] = useState<string | null>(null)
   const [otpCode, setOtpCode] = useState("")
   const [resendTimer, setResendTimer] = useState(0)
-  const [setDebugOtp, debugOtp] = useState<string | null>(null)
+  const [debugOtp, setDebugOtp] = useState<string | null>(null)
 
   const [fullName, setFullName] = useState("")
   const [region, setRegion] = useState("")

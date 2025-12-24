@@ -22,6 +22,7 @@ export function RegistrationForm({ telegramId, onComplete }: RegistrationFormPro
   const [error, setError] = useState<string | null>(null)
   const [otpCode, setOtpCode] = useState("")
   const [resendTimer, setResendTimer] = useState(0)
+  const [setDebugOtp, debugOtp] = useState<string | null>(null)
 
   const [fullName, setFullName] = useState("")
   const [region, setRegion] = useState("")
@@ -89,6 +90,13 @@ export function RegistrationForm({ telegramId, onComplete }: RegistrationFormPro
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.message || "SMS yuborishda xatolik")
+      }
+
+      const data = await response.json()
+
+      // Development mode: show OTP code for testing
+      if (data.debugOtp) {
+        setDebugOtp(data.debugOtp)
       }
 
       setResendTimer(60)
@@ -171,7 +179,7 @@ export function RegistrationForm({ telegramId, onComplete }: RegistrationFormPro
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="otp">Tasdiqlash kodi</Label>
+              <Label htmlFor="otp">Tasdiqlash kodi { debugOtp }</Label>
               <Input
                 id="otp"
                 type="text"

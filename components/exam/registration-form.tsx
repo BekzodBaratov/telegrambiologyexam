@@ -179,7 +179,7 @@ export function RegistrationForm({ telegramId, onComplete }: RegistrationFormPro
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="otp">Tasdiqlash kodi { debugOtp }</Label>
+              <Label htmlFor="otp">Tasdiqlash kodi: { debugOtp }</Label>
               <Input
                 id="otp"
                 type="text"

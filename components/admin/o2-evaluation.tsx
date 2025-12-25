@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import useSWR, { mutate } from "swr"
-import { Loader2, ChevronLeft, ChevronRight, Save, Filter, CheckCircle, AlertCircle } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import useSWR from "swr"
+import { Loader2, ChevronLeft, ChevronRight, Save, Filter, CheckCircle, AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,7 +12,14 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const fetcher = async (url: string) => {
+  const res = await fetch(url)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: "Server error" }))
+    throw new Error(error.message || "Failed to fetch")
+  }
+  return res.json()
+}
 
 interface O2Answer {
   id: number
@@ -26,6 +33,11 @@ interface O2Answer {
   teacher_score: number | null
   max_score: number
   test_code: string
+}
+
+interface Exam {
+  id: number
+  name: string
 }
 
 interface TestCode {
@@ -42,11 +54,16 @@ export function O2Evaluation() {
   const [scoreError, setScoreError] = useState<string | null>(null)
   const { toast } = useToast()
 
-  const { data: exams } = useSWR("/api/admin/exams", fetcher)
+  const { data: examsData, error: examsError, isLoading: examsLoading } = useSWR<Exam[]>("/api/admin/exams", fetcher)
 
-  const buildQueryUrl = () => {
-    if (!selectedExamId) return null
-    const params = new URLSearchParams({ examId: selectedExamId, ungradedOnly: "true" })
+  const exams = Array.isArray(examsData) ? examsData : []
+
+  const buildQueryUrl = useCallback(() => {
+    if (!selectedExamId || selectedExamId === "") return null
+    const params = new URLSearchParams({
+      examId: selectedExamId,
+      ungradedOnly: "true",
+    })
     if (selectedTestCode && selectedTestCode !== "all") {
       params.append("testCode", selectedTestCode)
     }
@@ -54,18 +71,32 @@ export function O2Evaluation() {
       params.append("questionPosition", selectedQuestionPosition)
     }
     return `/api/admin/o2-answers?${params.toString()}`
-  }
+  }, [selectedExamId, selectedTestCode, selectedQuestionPosition])
 
-  const { data: o2Answers, isLoading } = useSWR<O2Answer[]>(buildQueryUrl(), fetcher)
+  const queryUrl = buildQueryUrl()
 
-  const { data: testCodes } = useSWR<TestCode[]>(
+  const {
+    data: o2AnswersData,
+    isLoading: answersLoading,
+    error: answersError,
+    mutate: mutateAnswers,
+  } = useSWR<O2Answer[]>(queryUrl, fetcher, {
+    revalidateOnFocus: false,
+    shouldRetryOnError: false,
+  })
+
+  const o2Answers = Array.isArray(o2AnswersData) ? o2AnswersData : []
+
+  const { data: testCodesData } = useSWR<TestCode[]>(
     selectedExamId ? `/api/admin/test-codes?examId=${selectedExamId}` : null,
     fetcher,
   )
 
+  const testCodes = Array.isArray(testCodesData) ? testCodesData : []
+
   const questionPositions = [41, 42, 43]
 
-  const currentAnswer = o2Answers?.[currentIndex]
+  const currentAnswer = o2Answers[currentIndex]
 
   useEffect(() => {
     setCurrentIndex(0)
@@ -100,13 +131,13 @@ export function O2Evaluation() {
     return true
   }
 
-  const handleSaveScore = async () => {
-    if (!currentAnswer || !score) return
+  const handleSaveScore = async (moveToNext = false) => {
+    if (!currentAnswer || score === "") return
     if (!validateScore()) return
 
     setIsSaving(true)
     try {
-      await fetch("/api/admin/o2-score", {
+      const response = await fetch("/api/admin/o2-score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -115,14 +146,19 @@ export function O2Evaluation() {
         }),
       })
 
-      mutate(buildQueryUrl())
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || "Xatolik yuz berdi")
+      }
+
+      await mutateAnswers()
 
       toast({
         title: "Saqlandi",
         description: `${currentAnswer.student_name} - ${currentAnswer.question_number}-savol: ${score} ball`,
       })
 
-      if (currentIndex < (o2Answers?.length || 0) - 1) {
+      if (moveToNext && currentIndex < o2Answers.length - 1) {
         setCurrentIndex(currentIndex + 1)
         setScore("")
       }
@@ -130,7 +166,7 @@ export function O2Evaluation() {
       console.error("Error saving score:", error)
       toast({
         title: "Xatolik",
-        description: "Ballni saqlashda xatolik yuz berdi",
+        description: error instanceof Error ? error.message : "Ballni saqlashda xatolik yuz berdi",
         variant: "destructive",
       })
     } finally {
@@ -145,10 +181,24 @@ export function O2Evaluation() {
   }
 
   const handleNext = () => {
-    if (currentIndex < (o2Answers?.length || 0) - 1) {
+    if (currentIndex < o2Answers.length - 1) {
       setCurrentIndex(currentIndex + 1)
     }
   }
+
+  const handleRefresh = () => {
+    if (queryUrl) {
+      mutateAnswers()
+    }
+  }
+
+  const handleExamChange = (value: string) => {
+    setSelectedExamId(value)
+    setSelectedTestCode("all")
+    setSelectedQuestionPosition("all")
+  }
+
+  const isLoading = answersLoading && selectedExamId !== ""
 
   return (
     <div className="space-y-6">
@@ -168,16 +218,24 @@ export function O2Evaluation() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Imtihon</Label>
-              <Select value={selectedExamId} onValueChange={setSelectedExamId}>
+              <Select value={selectedExamId} onValueChange={handleExamChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Imtihonni tanlang" />
                 </SelectTrigger>
                 <SelectContent>
-                  {exams?.map((exam: { id: number; name: string }) => (
-                    <SelectItem key={exam.id} value={exam.id.toString()}>
-                      {exam.name}
-                    </SelectItem>
-                  ))}
+                  {examsLoading ? (
+                    <div className="p-2 text-center text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                    </div>
+                  ) : exams.length === 0 ? (
+                    <div className="p-2 text-center text-muted-foreground text-sm">Imtihonlar topilmadi</div>
+                  ) : (
+                    exams.map((exam) => (
+                      <SelectItem key={exam.id} value={exam.id.toString()}>
+                        {exam.name}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -190,7 +248,7 @@ export function O2Evaluation() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Barcha kodlar</SelectItem>
-                  {testCodes?.map((tc) => (
+                  {testCodes.map((tc) => (
                     <SelectItem key={tc.code} value={tc.code}>
                       {tc.code}
                     </SelectItem>
@@ -223,12 +281,31 @@ export function O2Evaluation() {
         </CardContent>
       </Card>
 
+      {answersError && selectedExamId && (
+        <Card className="border-destructive">
+          <CardContent className="py-8 text-center">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+            <p className="text-lg text-destructive">Ma'lumotlarni yuklashda xatolik</p>
+            <p className="text-sm text-muted-foreground mt-2">{answersError.message}</p>
+            <Button variant="outline" className="mt-4 bg-transparent" onClick={handleRefresh}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Qayta urinish
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Navigation */}
-      {o2Answers && o2Answers.length > 0 && (
+      {!answersError && o2Answers.length > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <Badge variant="secondary" className="text-sm">
-            Baholanmagan: {o2Answers.length} ta javob
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-sm">
+              Baholanmagan: {o2Answers.length} ta javob
+            </Badge>
+            <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={handlePrevious} disabled={currentIndex === 0}>
               <ChevronLeft className="h-4 w-4" />
@@ -255,9 +332,10 @@ export function O2Evaluation() {
         <Card>
           <CardContent className="py-16 text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+            <p className="text-sm text-muted-foreground mt-2">Ma'lumotlar yuklanmoqda...</p>
           </CardContent>
         </Card>
-      ) : !o2Answers || o2Answers.length === 0 ? (
+      ) : !answersError && o2Answers.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
             <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
@@ -368,10 +446,8 @@ export function O2Evaluation() {
 
                 <div className="flex gap-3">
                   <Button
-                    onClick={() => {
-                      if (validateScore()) handleSaveScore()
-                    }}
-                    disabled={isSaving || !score}
+                    onClick={() => handleSaveScore(false)}
+                    disabled={isSaving || score === ""}
                     variant="outline"
                     className="flex-1 bg-transparent"
                   >
@@ -379,10 +455,8 @@ export function O2Evaluation() {
                     Saqlash
                   </Button>
                   <Button
-                    onClick={() => {
-                      if (validateScore()) handleSaveScore()
-                    }}
-                    disabled={isSaving || !score || currentIndex >= (o2Answers?.length || 0) - 1}
+                    onClick={() => handleSaveScore(true)}
+                    disabled={isSaving || score === "" || currentIndex >= o2Answers.length - 1}
                     className="flex-1"
                   >
                     {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

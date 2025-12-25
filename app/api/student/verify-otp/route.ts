@@ -39,8 +39,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "OTP kod 6 raqamdan iborat bo'lishi kerak" }, { status: 400 })
     }
 
-    // Verify OTP - uses parameterized query (safe from SQL injection)
-    const [validOtp] = await sql`
+    const otpResults = await sql`
       SELECT * FROM otp_verifications
       WHERE phone_number = ${phoneNumber}
         AND otp_code = ${otpCode}
@@ -49,6 +48,8 @@ export async function POST(request: Request) {
       ORDER BY created_at DESC
       LIMIT 1
     `
+
+    const validOtp = Array.isArray(otpResults) && otpResults.length > 0 ? otpResults[0] : null
 
     if (!validOtp) {
       return NextResponse.json({ message: "Noto'g'ri yoki muddati o'tgan kod" }, { status: 400 })
@@ -63,34 +64,74 @@ export async function POST(request: Request) {
     const sanitizedRegion = sanitizeInput(region)
     const sanitizedDistrict = sanitizeInput(district)
 
-    // Check if student already exists
-    const [existingStudent] = await sql`
+    const existingResults = await sql`
       SELECT * FROM students WHERE telegram_id = ${validTelegramId}
     `
+    const existingStudent = Array.isArray(existingResults) && existingResults.length > 0 ? existingResults[0] : null
 
     let studentId: number
 
     if (existingStudent) {
-      // Update existing student
-      const [updated] = await sql`
-        UPDATE students 
-        SET full_name = ${sanitizedName},
-            region = ${sanitizedRegion},
-            district = ${sanitizedDistrict},
-            phone_number = ${phoneNumber},
-            is_verified = true
-        WHERE telegram_id = ${validTelegramId}
-        RETURNING id
-      `
-      studentId = updated.id
+      // Try to update with new columns, fallback to basic columns if migration hasn't run
+      try {
+        const updateResults = await sql`
+          UPDATE students 
+          SET full_name = ${sanitizedName},
+              region = ${sanitizedRegion},
+              district = ${sanitizedDistrict},
+              phone_number = ${phoneNumber},
+              is_verified = true
+          WHERE telegram_id = ${validTelegramId}
+          RETURNING id
+        `
+        const updated = Array.isArray(updateResults) && updateResults.length > 0 ? updateResults[0] : null
+        if (!updated) {
+          throw new Error("Update returned no results")
+        }
+        studentId = updated.id
+      } catch (updateError) {
+        // Fallback: only update full_name if new columns don't exist
+        console.error("Full update failed, trying basic update:", updateError)
+        const basicUpdateResults = await sql`
+          UPDATE students 
+          SET full_name = ${sanitizedName}
+          WHERE telegram_id = ${validTelegramId}
+          RETURNING id
+        `
+        const updated =
+          Array.isArray(basicUpdateResults) && basicUpdateResults.length > 0 ? basicUpdateResults[0] : null
+        if (!updated) {
+          return NextResponse.json({ message: "Talabani yangilashda xatolik" }, { status: 500 })
+        }
+        studentId = updated.id
+      }
     } else {
-      // Create new student
-      const [newStudent] = await sql`
-        INSERT INTO students (telegram_id, full_name, region, district, phone_number, is_verified)
-        VALUES (${validTelegramId}, ${sanitizedName}, ${sanitizedRegion}, ${sanitizedDistrict}, ${phoneNumber}, true)
-        RETURNING id
-      `
-      studentId = newStudent.id
+      try {
+        const insertResults = await sql`
+          INSERT INTO students (telegram_id, full_name, region, district, phone_number, is_verified)
+          VALUES (${validTelegramId}, ${sanitizedName}, ${sanitizedRegion}, ${sanitizedDistrict}, ${phoneNumber}, true)
+          RETURNING id
+        `
+        const newStudent = Array.isArray(insertResults) && insertResults.length > 0 ? insertResults[0] : null
+        if (!newStudent) {
+          throw new Error("Insert returned no results")
+        }
+        studentId = newStudent.id
+      } catch (insertError) {
+        // Fallback: insert with basic columns only
+        console.error("Full insert failed, trying basic insert:", insertError)
+        const basicInsertResults = await sql`
+          INSERT INTO students (telegram_id, full_name)
+          VALUES (${validTelegramId}, ${sanitizedName})
+          RETURNING id
+        `
+        const newStudent =
+          Array.isArray(basicInsertResults) && basicInsertResults.length > 0 ? basicInsertResults[0] : null
+        if (!newStudent) {
+          return NextResponse.json({ message: "Talabani yaratishda xatolik" }, { status: 500 })
+        }
+        studentId = newStudent.id
+      }
     }
 
     return NextResponse.json({

@@ -50,6 +50,7 @@ export type Question = {
   text: string
   options: Record<string, string> | null
   correct_answer: string | null
+  correct_option_id: string | null
   max_score: number
   created_at: Date
   question_type?: QuestionType
@@ -105,6 +106,11 @@ export type StudentAttempt = {
   question_order: number[] | null
   option_orders: Record<number, string[]> | null
   randomization_seed: number | null
+  part1_score: number | null
+  part2_score: number | null
+  final_score: number | null
+  percentage: number | null
+  certificate_level: "C" | "B" | "B+" | "A" | "A+" | null
 }
 
 export type StudentAnswer = {
@@ -112,6 +118,7 @@ export type StudentAnswer = {
   attempt_id: number
   question_id: number
   answer: string | null
+  selected_option_id: string | null
   image_urls: string[] | null
   is_correct: boolean | null
   score: number | null
@@ -134,4 +141,20 @@ export type AdminSession = {
   token: string
   expires_at: Date
   created_at: Date
+}
+
+export type QuestionStatistics = {
+  id: number
+  question_id: number
+  total_attempts: number
+  correct_attempts: number
+  correct_percent: number | null
+  rasch_ball: number | null
+  last_calculated_at: Date | null
+  created_at: Date
+  updated_at: Date
+}
+
+export type QuestionWithStatistics = Question & {
+  statistics?: QuestionStatistics | null
 }

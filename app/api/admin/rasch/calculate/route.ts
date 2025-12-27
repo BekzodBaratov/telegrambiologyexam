@@ -3,17 +3,26 @@ import { sql } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { z } from "zod"
 
-const MIN_ATTEMPTS_FOR_RASCH = 5
+const MIN_ATTEMPTS_FOR_RASCH = 1
 
+// correct_percent > 85 → -4
+// 85 ≥ correct_percent > 75 → -3
+// 75 ≥ correct_percent > 65 → -2
+// 65 ≥ correct_percent > 55 → -1
+// 55 ≥ correct_percent > 45 → 0
+// 45 ≥ correct_percent > 35 → 1
+// 35 ≥ correct_percent > 25 → 2
+// 25 ≥ correct_percent > 15 → 3
+// correct_percent ≤ 15 → 4
 function calculateRaschBall(correctPercent: number): number {
   if (correctPercent > 85) return -4
-  if (correctPercent >= 75) return -3
-  if (correctPercent >= 65) return -2
-  if (correctPercent >= 55) return -1
-  if (correctPercent >= 45) return 0
-  if (correctPercent >= 35) return 1
-  if (correctPercent >= 25) return 2
-  if (correctPercent >= 15) return 3
+  if (correctPercent > 75) return -3
+  if (correctPercent > 65) return -2
+  if (correctPercent > 55) return -1
+  if (correctPercent > 45) return 0
+  if (correctPercent > 35) return 1
+  if (correctPercent > 25) return 2
+  if (correctPercent > 15) return 3
   return 4
 }
 
@@ -22,6 +31,8 @@ const requestSchema = z.object({
 })
 
 export async function POST(request: Request) {
+  const startTime = Date.now()
+
   try {
     const user = await getCurrentUser()
     if (!user) {
@@ -48,6 +59,7 @@ export async function POST(request: Request) {
         FROM student_answers sa
         JOIN student_attempts att ON sa.attempt_id = att.id
         WHERE att.exam_id = ${examId}
+          AND att.status = 'completed'
       )
       SELECT 
         q.id,
@@ -70,15 +82,17 @@ export async function POST(request: Request) {
       return NextResponse.json({
         message: "Bu imtihon uchun savollar topilmadi",
         results: [],
+        processedCount: 0,
+        skippedCount: 0,
+        executionTimeMs: Date.now() - startTime,
       })
     }
 
     const results = []
     let processedCount = 0
     let skippedCount = 0
-    let insufficientDataCount = 0
 
-    const BATCH_SIZE = 20
+    const BATCH_SIZE = 50
     const batches = []
 
     for (let i = 0; i < questions.length; i += BATCH_SIZE) {
@@ -92,25 +106,18 @@ export async function POST(request: Request) {
         const totalAttempts = Number(q.total_attempts) || 0
         const correctAttempts = Number(q.correct_attempts) || 0
 
-        // Skip questions with no attempts
-        if (totalAttempts === 0) {
-          skippedCount++
-          continue
-        }
-
         if (totalAttempts < MIN_ATTEMPTS_FOR_RASCH) {
-          insufficientDataCount++
+          skippedCount++
           results.push({
             questionId: q.id,
             questionNumber: q.question_number,
             questionType: q.question_type,
-            questionText: q.text?.substring(0, 50) + (q.text?.length > 50 ? "..." : ""),
+            questionText: q.text?.substring(0, 80) + (q.text?.length > 80 ? "..." : ""),
             totalAttempts,
             correctAttempts,
             correctPercent: null,
             raschBall: null,
-            status: "insufficient_data",
-            message: `Kamida ${MIN_ATTEMPTS_FOR_RASCH} ta urinish kerak (hozirda: ${totalAttempts})`,
+            status: "skipped",
           })
           continue
         }
@@ -135,7 +142,7 @@ export async function POST(request: Request) {
           questionId: q.id,
           questionNumber: q.question_number,
           questionType: q.question_type,
-          questionText: q.text?.substring(0, 50) + (q.text?.length > 50 ? "..." : ""),
+          questionText: q.text?.substring(0, 80) + (q.text?.length > 80 ? "..." : ""),
           totalAttempts,
           correctAttempts,
           correctPercent: Math.round(correctPercent * 100) / 100,
@@ -146,21 +153,30 @@ export async function POST(request: Request) {
         processedCount++
       }
 
-      await Promise.all(updatePromises)
+      // Execute batch updates
+      if (updatePromises.length > 0) {
+        await Promise.all(updatePromises)
+      }
     }
 
     results.sort((a, b) => a.questionNumber - b.questionNumber)
 
+    const executionTimeMs = Date.now() - startTime
+
+    console.log(
+      `[Rasch] Calculation completed: ${processedCount} processed, ${skippedCount} skipped, ${executionTimeMs}ms`,
+    )
+
     return NextResponse.json({
-      message: `Rasch hisoblandi: ${processedCount} ta savol qayta ishlandi, ${skippedCount} ta o'tkazib yuborildi, ${insufficientDataCount} ta yetarli ma'lumot yo'q`,
+      message: `Rasch hisoblandi: ${processedCount} ta savol qayta ishlandi, ${skippedCount} ta o'tkazib yuborildi`,
       processedCount,
       skippedCount,
-      insufficientDataCount,
-      minAttemptsRequired: MIN_ATTEMPTS_FOR_RASCH,
+      totalQuestions: questions.length,
+      executionTimeMs,
       results,
     })
   } catch (error) {
-    console.error("Rasch calculation error:", error)
+    console.error("[Rasch] Calculation error:", error)
     return NextResponse.json({ message: "Server xatosi" }, { status: 500 })
   }
 }

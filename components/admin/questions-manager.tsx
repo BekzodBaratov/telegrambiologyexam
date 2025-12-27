@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import useSWR, { mutate } from "swr"
 import { Plus, Pencil, Trash2, Loader2, Upload, X, Eye, ChevronLeft, ChevronRight, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -66,6 +66,15 @@ export function QuestionsManager() {
 
   const [filterType, setFilterType] = useState<string>("all")
   const [filterSection, setFilterSection] = useState<string>("all")
+
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile)
+  }, [])
 
   const [formData, setFormData] = useState({
     questionTypeId: "",
@@ -283,27 +292,24 @@ export function QuestionsManager() {
     }
   }
 
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 768
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Savollar boshqaruvi</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground">Savollar boshqaruvi</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             Y1, O1, O2 savollarini qo&apos;shish (Y2 uchun &quot;Guruhlar&quot; bo&apos;limiga o&apos;ting)
           </p>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
+        <Button onClick={() => handleOpenDialog()} className="w-full sm:w-auto self-start">
           <Plus className="mr-2 h-4 w-4" />
-          <span className="hidden sm:inline">Yangi savol</span>
-          <span className="sm:hidden">Qo'shish</span>
+          Yangi savol
         </Button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <Select value={filterType} onValueChange={(v) => handleFilterChange("type", v)}>
-          <SelectTrigger className="w-full sm:w-[150px]">
+          <SelectTrigger className="w-full sm:w-[140px]">
             <SelectValue placeholder="Turi" />
           </SelectTrigger>
           <SelectContent>
@@ -314,7 +320,7 @@ export function QuestionsManager() {
           </SelectContent>
         </Select>
         <Select value={filterSection} onValueChange={(v) => handleFilterChange("section", v)}>
-          <SelectTrigger className="w-full sm:w-[200px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Bo'lim" />
           </SelectTrigger>
           <SelectContent>
@@ -327,7 +333,9 @@ export function QuestionsManager() {
           </SelectContent>
         </Select>
         {filteredQuestions.length > 0 && (
-          <div className="text-sm text-muted-foreground self-center ml-auto">{filteredQuestions.length} ta savol</div>
+          <div className="text-sm text-muted-foreground self-center sm:ml-auto">
+            {filteredQuestions.length} ta savol
+          </div>
         )}
       </div>
 
@@ -337,57 +345,63 @@ export function QuestionsManager() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-12">#</TableHead>
-                  <TableHead className="w-20">Turi</TableHead>
-                  <TableHead className="hidden sm:table-cell">Bo&apos;lim</TableHead>
-                  <TableHead className="min-w-[200px]">Savol</TableHead>
-                  <TableHead className="w-16 text-center">Amallar</TableHead>
+                  <TableHead className="w-14 text-center">#</TableHead>
+                  <TableHead className="w-16">Turi</TableHead>
+                  <TableHead className="hidden md:table-cell w-32">Bo&apos;lim</TableHead>
+                  <TableHead>Savol</TableHead>
+                  <TableHead className="w-28 text-center">Amallar</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loadingQuestions ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
+                    <TableRow key={i} className="h-14">
                       <TableCell>
-                        <Skeleton className="h-4 w-8" />
+                        <Skeleton className="h-4 w-8 mx-auto" />
                       </TableCell>
                       <TableCell>
                         <Skeleton className="h-5 w-10" />
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <Skeleton className="h-4 w-24" />
+                      <TableCell className="hidden md:table-cell">
+                        <Skeleton className="h-4 w-20" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-full max-w-xs" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-8 w-20" />
+                        <Skeleton className="h-8 w-20 mx-auto" />
                       </TableCell>
                     </TableRow>
                   ))
                 ) : filteredQuestions.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                      <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                      <p className="text-base">Savollar topilmadi</p>
-                      <p className="text-sm mt-1">Yangi savol qo'shish uchun tugmani bosing</p>
+                      <BookOpen className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm font-medium">Savollar topilmadi</p>
+                      <p className="text-xs mt-1">Yangi savol qo'shish uchun tugmani bosing</p>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedQuestions.map((q) => (
+                  paginatedQuestions.map((q, index) => (
                     <TableRow key={q.id} className="h-14">
-                      <TableCell className="font-medium text-muted-foreground">{q.question_number}</TableCell>
-                      <TableCell>
-                        <Badge className={getTypeBadgeColor(q.question_type_code)}>{q.question_type_code}</Badge>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
-                        {q.section_title}
+                      <TableCell className="text-center font-mono text-sm text-muted-foreground">
+                        {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
                       </TableCell>
                       <TableCell>
-                        <p className="line-clamp-2 text-sm">{q.text}</p>
+                        <Badge className={cn("text-xs", getTypeBadgeColor(q.question_type_code))}>
+                          {q.question_type_code}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <span className="text-xs text-muted-foreground truncate block max-w-[120px]">
+                          {q.section_title}
+                        </span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-1 justify-center">
+                        <p className="text-sm line-clamp-2 max-w-xs lg:max-w-md">{q.text}</p>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-0.5 justify-center">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -426,6 +440,7 @@ export function QuestionsManager() {
         </CardContent>
       </Card>
 
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
@@ -452,37 +467,39 @@ export function QuestionsManager() {
         </div>
       )}
 
-      <Sheet open={isViewOpen} onOpenChange={setIsViewOpen}>
-        <SheetContent side="bottom" className="h-[85vh] overflow-y-auto sm:hidden">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <span>Savol #{viewingQuestion?.question_number}</span>
-              {viewingQuestion && (
-                <Badge className={getTypeBadgeColor(viewingQuestion.question_type_code)}>
-                  {viewingQuestion.question_type_code}
-                </Badge>
-              )}
-            </SheetTitle>
-          </SheetHeader>
-          {viewingQuestion && <QuestionDetails question={viewingQuestion} />}
-        </SheetContent>
-      </Sheet>
-
-      <Dialog open={isViewOpen && !isMobile} onOpenChange={setIsViewOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto hidden sm:block">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span>Savol #{viewingQuestion?.question_number}</span>
-              {viewingQuestion && (
-                <Badge className={getTypeBadgeColor(viewingQuestion.question_type_code)}>
-                  {viewingQuestion.question_type_code}
-                </Badge>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          {viewingQuestion && <QuestionDetails question={viewingQuestion} />}
-        </DialogContent>
-      </Dialog>
+      {isMobile ? (
+        <Sheet open={isViewOpen} onOpenChange={setIsViewOpen}>
+          <SheetContent side="bottom" className="h-[90vh] overflow-y-auto rounded-t-xl">
+            <SheetHeader className="pb-4 border-b">
+              <SheetTitle className="flex items-center gap-2">
+                <span>Savol #{viewingQuestion?.question_number}</span>
+                {viewingQuestion && (
+                  <Badge className={getTypeBadgeColor(viewingQuestion.question_type_code)}>
+                    {viewingQuestion.question_type_code}
+                  </Badge>
+                )}
+              </SheetTitle>
+            </SheetHeader>
+            {viewingQuestion && <QuestionDetails question={viewingQuestion} />}
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <span>Savol #{viewingQuestion?.question_number}</span>
+                {viewingQuestion && (
+                  <Badge className={getTypeBadgeColor(viewingQuestion.question_type_code)}>
+                    {viewingQuestion.question_type_code}
+                  </Badge>
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            {viewingQuestion && <QuestionDetails question={viewingQuestion} />}
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Edit/Create Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -593,40 +610,41 @@ export function QuestionsManager() {
             {selectedTypeCode === "Y1" && (
               <div className="space-y-4">
                 <Label>
-                  Variantlar <span className="text-destructive">*</span>
+                  Variantlar va to&apos;g&apos;ri javob <span className="text-destructive">*</span>
                 </Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {["A", "B", "C", "D"].map((letter) => (
-                    <div key={letter} className="space-y-1">
-                      <Label className="text-sm text-muted-foreground">{letter}</Label>
-                      <Input
-                        value={formData[`option${letter}` as keyof typeof formData] as string}
-                        onChange={(e) => setFormData({ ...formData, [`option${letter}`]: e.target.value })}
-                        placeholder={`${letter} varianti`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {selectedTypeCode === "Y1" && (
-              <div className="space-y-2">
-                <Label>
-                  To&apos;g&apos;ri javob <span className="text-destructive">*</span>
-                </Label>
-                <div className="grid grid-cols-4 gap-2">
-                  {["A", "B", "C", "D"].map((letter) => (
-                    <Button
-                      key={letter}
-                      type="button"
-                      variant={formData.y1CorrectAnswer === letter ? "default" : "outline"}
-                      className={formData.y1CorrectAnswer === letter ? "ring-2 ring-green-500" : ""}
-                      onClick={() => setFormData({ ...formData, y1CorrectAnswer: letter })}
-                    >
-                      {letter}
-                    </Button>
-                  ))}
+                <p className="text-xs text-muted-foreground -mt-2">
+                  To'g'ri javobni belgilash uchun variant yonidagi tugmani bosing
+                </p>
+                <div className="space-y-3">
+                  {["A", "B", "C", "D"].map((letter) => {
+                    const isCorrect = formData.y1CorrectAnswer === letter
+                    return (
+                      <div
+                        key={letter}
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-lg border transition-colors",
+                          isCorrect ? "bg-green-50 border-green-300" : "bg-background",
+                        )}
+                      >
+                        <Button
+                          type="button"
+                          variant={isCorrect ? "default" : "outline"}
+                          size="sm"
+                          className={cn("h-8 w-8 p-0 shrink-0", isCorrect && "bg-green-600 hover:bg-green-700")}
+                          onClick={() => setFormData({ ...formData, y1CorrectAnswer: letter })}
+                        >
+                          {letter}
+                        </Button>
+                        <Input
+                          value={formData[`option${letter}` as keyof typeof formData] as string}
+                          onChange={(e) => setFormData({ ...formData, [`option${letter}`]: e.target.value })}
+                          placeholder={`${letter} variantini kiriting`}
+                          className="flex-1"
+                        />
+                        {isCorrect && <Badge className="bg-green-600 shrink-0">To'g'ri</Badge>}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -671,72 +689,61 @@ export function QuestionsManager() {
 }
 
 function QuestionDetails({ question }: { question: Question }) {
-  const getTypeBadgeColor = (type: string) => {
-    switch (type) {
-      case "Y1":
-        return "bg-blue-100 text-blue-800"
-      case "O1":
-        return "bg-green-100 text-green-800"
-      case "O2":
-        return "bg-orange-100 text-orange-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
-  }
-
   return (
-    <div className="space-y-6 pt-4">
+    <div className="space-y-5 pt-4">
       <div>
-        <Label className="text-sm text-muted-foreground">Bo'lim</Label>
-        <p className="font-medium">{question.section_title}</p>
+        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Bo'lim</Label>
+        <p className="font-medium mt-1">{question.section_title}</p>
       </div>
 
       <div>
-        <Label className="text-sm text-muted-foreground">Savol matni</Label>
-        <p className="mt-1 p-3 bg-muted rounded-lg">{question.text}</p>
+        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Savol matni</Label>
+        <p className="mt-1 p-3 bg-muted rounded-lg text-sm leading-relaxed">{question.text}</p>
       </div>
 
       {question.image_url && (
         <div>
-          <Label className="text-sm text-muted-foreground">Savol rasmi</Label>
+          <Label className="text-xs text-muted-foreground uppercase tracking-wide">Savol rasmi</Label>
           <img
             src={question.image_url || "/placeholder.svg"}
             alt="Savol rasmi"
-            className="mt-2 max-h-48 rounded-lg border object-contain"
+            className="mt-2 max-h-64 rounded-lg border object-contain w-full"
           />
         </div>
       )}
 
       {question.options && Object.keys(question.options).length > 0 && (
         <div>
-          <Label className="text-sm text-muted-foreground">Variantlar</Label>
+          <Label className="text-xs text-muted-foreground uppercase tracking-wide">Variantlar</Label>
           <div className="mt-2 space-y-2">
-            {Object.entries(question.options).map(([key, value]) => (
-              <div
-                key={key}
-                className={`flex items-center gap-3 p-3 rounded-lg border ${
-                  key === question.correct_answer ? "bg-green-50 border-green-200" : "bg-background"
-                }`}
-              >
-                <Badge
-                  variant={key === question.correct_answer ? "default" : "outline"}
-                  className={key === question.correct_answer ? "bg-green-600" : ""}
+            {Object.entries(question.options).map(([key, value]) => {
+              const isCorrect = key === question.correct_answer
+              return (
+                <div
+                  key={key}
+                  className={cn(
+                    "flex items-start gap-3 p-3 rounded-lg border",
+                    isCorrect ? "bg-green-50 border-green-200" : "bg-background",
+                  )}
                 >
-                  {key}
-                </Badge>
-                <span>{value}</span>
-                {key === question.correct_answer && (
-                  <Badge className="ml-auto bg-green-100 text-green-800">To'g'ri</Badge>
-                )}
-              </div>
-            ))}
+                  <Badge
+                    variant={isCorrect ? "default" : "outline"}
+                    className={cn("shrink-0 mt-0.5", isCorrect && "bg-green-600")}
+                  >
+                    {key}
+                  </Badge>
+                  <span className="text-sm flex-1">{value}</span>
+                  {isCorrect && <Badge className="bg-green-100 text-green-800 shrink-0">To'g'ri</Badge>}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
 
       {question.question_type_code === "O1" && question.correct_answer && (
         <div>
-          <Label className="text-sm text-muted-foreground">To'g'ri javob</Label>
+          <Label className="text-xs text-muted-foreground uppercase tracking-wide">To'g'ri javob</Label>
           <p className="mt-1 p-3 bg-green-50 rounded-lg border border-green-200 font-medium">
             {question.correct_answer}
           </p>
@@ -744,4 +751,8 @@ function QuestionDetails({ question }: { question: Question }) {
       )}
     </div>
   )
+}
+
+function cn(...classes: (string | boolean | undefined)[]) {
+  return classes.filter(Boolean).join(" ")
 }

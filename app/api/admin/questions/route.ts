@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getPaginationFromRequest, createPaginatedResponse } from "@/lib/api-cache"
+import { generateOptionId } from "@/lib/option-utils"
 
 export async function GET(request: Request) {
   try {
@@ -101,6 +102,16 @@ export async function POST(request: Request) {
       VALUES (${sectionId}, ${questionNumber}, ${questionTypeId}, ${text}, ${options ? JSON.stringify(options) : null}, ${correctAnswer}, ${imageUrl})
       RETURNING *
     `
+
+    if (question && correctAnswer && correctAnswer.match(/^[A-Z]$/i)) {
+      const correctOptionId = generateOptionId(question.id, correctAnswer)
+      await sql`
+        UPDATE questions 
+        SET correct_option_id = ${correctOptionId}
+        WHERE id = ${question.id}
+      `
+      question.correct_option_id = correctOptionId
+    }
 
     return NextResponse.json(question)
   } catch (error) {

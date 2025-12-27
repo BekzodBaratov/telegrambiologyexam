@@ -151,12 +151,30 @@ export function O2Evaluation() {
         throw new Error(errorData.message || "Xatolik yuz berdi")
       }
 
+      const result = await response.json()
+
       await mutateAnswers()
 
-      toast({
-        title: "Saqlandi",
-        description: `${currentAnswer.student_name} - ${currentAnswer.question_number}-savol: ${score} ball`,
-      })
+      if (result.finalCalculated) {
+        const certMessage = result.certificateLevel
+          ? `Sertifikat: ${result.certificateLevel}`
+          : "Sertifikat berilmadi (ball 46% dan past)"
+        toast({
+          title: "Natijalar tasdiqlandi",
+          description: `${currentAnswer.student_name} - yakuniy ball hisoblandi. ${certMessage}`,
+          duration: 5000,
+        })
+      } else if (result.allO2Graded) {
+        toast({
+          title: "Baholandi",
+          description: `${currentAnswer.student_name} - barcha O2 savollari baholandi. Part 2 ball hisoblandi.`,
+        })
+      } else {
+        toast({
+          title: "Saqlandi",
+          description: `${currentAnswer.student_name} - ${currentAnswer.question_number}-savol: ${score} ball`,
+        })
+      }
 
       if (moveToNext && currentIndex < o2Answers.length - 1) {
         setCurrentIndex(currentIndex + 1)

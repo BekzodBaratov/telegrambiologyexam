@@ -2,15 +2,19 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { saveAnswersBatchSchema } from "@/lib/validations"
 import { checkRateLimit } from "@/lib/security"
+import { generateOptionId, isAnswerCorrect, resolveCorrectOptionId } from "@/lib/option-utils"
 
 /**
  * IMPORTANT: Answer validation with randomized options
  *
- * The correct_answer in the questions table is stored using the ORIGINAL option letters (A, B, C, D).
- * However, students see RANDOMIZED options where the original "A" might be displayed as "C".
+ * NEW APPROACH (correct_option_id):
+ * - Each option has a stable ID: "{questionId}_{originalLetter}" (e.g., "123_A")
+ * - Students submit selected_option_id which never changes regardless of display order
+ * - Validation compares selected_option_id against correct_option_id
  *
- * When a student submits an answer, they send the DISPLAYED letter (e.g., "C").
- * We must map this back to the ORIGINAL letter before comparing against correct_answer.
+ * LEGACY APPROACH (correct_answer letter):
+ * - For questions without correct_option_id, we fall back to letter-based validation
+ * - We map the displayed letter back to the original letter using option_orders
  */
 
 function getOriginalLetter(displayedLetter: string, storedOrder: string[] | null): string {
@@ -85,7 +89,7 @@ export async function POST(request: Request) {
 
     for (const answer of answers) {
       const [question] = await sql`
-        SELECT q.correct_answer, q.max_score, qt.code as question_type_code
+        SELECT q.correct_answer, q.correct_option_id, q.max_score, qt.code as question_type_code
         FROM questions q
         JOIN question_types qt ON q.question_type_id = qt.id
         WHERE q.id = ${answer.questionId}
@@ -94,33 +98,53 @@ export async function POST(request: Request) {
       if (!question) continue
 
       let isCorrect: boolean | null = null
+      let selectedOptionId: string | null = null
       const storedOrder = optionOrders[answer.questionId] || null
       const submittedAnswer = answer.answer || ""
 
-      if (question.correct_answer) {
-        const questionType = question.question_type_code
+      const questionType = question.question_type_code
 
-        if (questionType === "Y1") {
-          const originalAnswer = getOriginalLetter(submittedAnswer, storedOrder)
-          isCorrect = question.correct_answer.toUpperCase() === originalAnswer.toUpperCase()
-        } else if (questionType === "Y2") {
+      if (questionType === "Y1") {
+        // Check if student submitted an option ID directly (new format)
+        if (answer.selectedOptionId) {
+          selectedOptionId = answer.selectedOptionId
+          const correctOptionId = resolveCorrectOptionId(
+            answer.questionId,
+            question.correct_option_id,
+            question.correct_answer,
+          )
+          isCorrect = isAnswerCorrect(selectedOptionId, correctOptionId)
+        }
+        // Fall back to letter-based validation (legacy format)
+        else if (submittedAnswer && question.correct_answer) {
+          const originalLetter = getOriginalLetter(submittedAnswer, storedOrder)
+          isCorrect = question.correct_answer.toUpperCase() === originalLetter.toUpperCase()
+          // Generate selected_option_id from the original letter for record-keeping
+          selectedOptionId = generateOptionId(answer.questionId, originalLetter)
+        }
+      } else if (questionType === "Y2") {
+        if (question.correct_answer) {
           const originalAnswer = getOriginalY2Answer(submittedAnswer, storedOrder)
           isCorrect = question.correct_answer.toUpperCase() === originalAnswer.toUpperCase()
-        } else if (questionType === "O1") {
-          isCorrect = question.correct_answer.toLowerCase() === submittedAnswer.toLowerCase()
-        } else {
+        }
+      } else if (questionType === "O1") {
+        if (question.correct_answer) {
           isCorrect = question.correct_answer.toLowerCase() === submittedAnswer.toLowerCase()
         }
+      } else {
+        // O2 questions - teacher graded
+        isCorrect = null
       }
 
       const score = isCorrect ? question?.max_score || 1 : 0
 
       await sql`
-        INSERT INTO student_answers (attempt_id, question_id, answer, image_urls, is_correct, score, updated_at)
+        INSERT INTO student_answers (attempt_id, question_id, answer, selected_option_id, image_urls, is_correct, score, updated_at)
         VALUES (
           ${attemptId},
           ${answer.questionId},
           ${answer.answer || null},
+          ${selectedOptionId},
           ${answer.imageUrls ? JSON.stringify(answer.imageUrls) : null},
           ${isCorrect},
           ${score},
@@ -129,6 +153,7 @@ export async function POST(request: Request) {
         ON CONFLICT (attempt_id, question_id)
         DO UPDATE SET
           answer = ${answer.answer || null},
+          selected_option_id = ${selectedOptionId},
           image_urls = ${answer.imageUrls ? JSON.stringify(answer.imageUrls) : null},
           is_correct = ${isCorrect},
           score = ${score},

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { applyOptionOrder } from "@/lib/randomization"
+import { addOptionIds } from "@/lib/option-utils"
 
 export async function GET(request: Request) {
   try {
@@ -116,18 +117,21 @@ export async function GET(request: Request) {
               storedOrder,
               q.correct_answer,
             )
+            const optionsWithIds = addOptionIds(q.id, shuffledOptions)
             return {
               ...q,
               text: q.group_stem,
               options: shuffledOptions,
+              optionsWithIds,
               correct_answer: newCorrectAnswer,
-              original_options: groupOptions, // Keep original for admin reference
+              original_options: groupOptions,
             }
           }
           return {
             ...q,
             text: q.group_stem,
             options: groupOptions,
+            optionsWithIds: addOptionIds(q.id, groupOptions),
           }
         }
 
@@ -138,15 +142,20 @@ export async function GET(request: Request) {
             storedOrder,
             q.correct_answer,
           )
+          const optionsWithIds = addOptionIds(q.id, shuffledOptions)
           return {
             ...q,
             options: shuffledOptions,
+            optionsWithIds,
             correct_answer: newCorrectAnswer,
             original_options: q.options,
           }
         }
 
-        return q
+        return {
+          ...q,
+          optionsWithIds: q.options ? addOptionIds(q.id, q.options) : null,
+        }
       })
     } else {
       // No randomization stored, apply Y2 group processing only
@@ -156,9 +165,13 @@ export async function GET(request: Request) {
             ...q,
             text: q.group_stem,
             options: q.group_options || q.options,
+            optionsWithIds: addOptionIds(q.id, q.group_options || q.options),
           }
         }
-        return q
+        return {
+          ...q,
+          optionsWithIds: q.options ? addOptionIds(q.id, q.options) : null,
+        }
       })
     }
 

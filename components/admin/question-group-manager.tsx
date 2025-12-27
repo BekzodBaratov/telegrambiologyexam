@@ -1,7 +1,7 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import useSWR, { mutate } from "swr"
-import { Plus, Trash2, Loader2, X, ChevronDown, ChevronUp } from "lucide-react"
+import { Plus, Trash2, Loader2, X, Eye, FolderTree } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -16,9 +16,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Fragment } from "react"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -57,6 +58,17 @@ export function QuestionGroupManager() {
   const [isLoading, setIsLoading] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set())
 
+  const [viewingGroup, setViewingGroup] = useState<QuestionGroup | null>(null)
+  const [isViewOpen, setIsViewOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile)
+  }, [])
+
   const [formData, setFormData] = useState({
     sectionId: "",
     stem: "",
@@ -86,6 +98,11 @@ export function QuestionGroupManager() {
     })
     setSubQuestions([{ text: "", correctAnswer: "" }])
     setIsDialogOpen(true)
+  }
+
+  const handleViewGroup = (group: QuestionGroup) => {
+    setViewingGroup(group)
+    setIsViewOpen(true)
   }
 
   const handleAddSubQuestion = () => {
@@ -164,13 +181,15 @@ export function QuestionGroupManager() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Y2 Guruhli savollar</h1>
-          <p className="text-muted-foreground">Kompozit savollar - bir savol matni, bir nechta sub-savollar</p>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground">Y2 Guruhli savollar</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+            Kompozit savollar - bir savol matni, bir nechta sub-savollar
+          </p>
         </div>
-        <Button onClick={handleOpenDialog}>
+        <Button onClick={handleOpenDialog} className="w-full sm:w-auto self-start">
           <Plus className="mr-2 h-4 w-4" />
           Yangi guruh
         </Button>
@@ -178,131 +197,123 @@ export function QuestionGroupManager() {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12"></TableHead>
-                <TableHead>Bo&apos;lim</TableHead>
-                <TableHead>Savol matni (stem)</TableHead>
-                <TableHead className="w-32">Sub-savollar</TableHead>
-                <TableHead className="w-24">Amallar</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loadingGroups ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                  </TableCell>
+                  <TableHead className="w-14 text-center">#</TableHead>
+                  <TableHead className="hidden sm:table-cell w-32">Bo&apos;lim</TableHead>
+                  <TableHead>Savol matni</TableHead>
+                  <TableHead className="w-20 text-center">Soni</TableHead>
+                  <TableHead className="w-24 text-center">Amallar</TableHead>
                 </TableRow>
-              ) : groups?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                    Hozircha Y2 guruhlar yo&apos;q
-                  </TableCell>
-                </TableRow>
-              ) : (
-                groups?.map((group) => (
-                  <Fragment key={group.id}>
-                    <TableRow className="cursor-pointer hover:bg-muted/50" onClick={() => toggleExpanded(group.id)}>
+              </TableHeader>
+              <TableBody>
+                {loadingGroups ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <TableRow key={i} className="h-14">
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleExpanded(group.id)
-                          }}
-                        >
-                          {expandedGroups.has(group.id) ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" />
-                          )}
-                        </Button>
+                        <Skeleton className="h-4 w-8 mx-auto" />
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Skeleton className="h-5 w-20" />
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary">{group.section_title}</Badge>
-                      </TableCell>
-                      <TableCell className="max-w-md truncate">{group.stem}</TableCell>
-                      <TableCell>
-                        <Badge className="bg-purple-100 text-purple-800">{group.questions?.length || 0} ta</Badge>
+                        <Skeleton className="h-4 w-full max-w-xs" />
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDelete(group.id)
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <Skeleton className="h-5 w-10 mx-auto" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-8 w-16 mx-auto" />
                       </TableCell>
                     </TableRow>
-                    {expandedGroups.has(group.id) && (
-                      <TableRow className="bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={5} className="p-4">
-                          <div className="space-y-4">
-                            {/* Full stem text */}
-                            <div>
-                              <Label className="text-sm font-medium">To'liq savol matni:</Label>
-                              <p className="mt-1 text-sm bg-background p-3 rounded-md border">{group.stem}</p>
-                            </div>
-
-                            {/* Options */}
-                            <div>
-                              <Label className="text-sm font-medium">Variantlar (A-F):</Label>
-                              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-                                {Object.entries(group.options || {}).map(([key, value]) => (
-                                  <div key={key} className="flex items-start gap-2 p-2 bg-background rounded border">
-                                    <Badge variant="outline" className="font-bold">
-                                      {key}
-                                    </Badge>
-                                    <span className="text-sm">{value}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Sub-questions - CRITICAL: Must be visible */}
-                            <div>
-                              <Label className="text-sm font-medium">Sub-savollar:</Label>
-                              <div className="space-y-2 mt-2">
-                                {!group.questions || group.questions.length === 0 ? (
-                                  <p className="text-sm text-muted-foreground italic">Sub-savollar mavjud emas</p>
-                                ) : (
-                                  group.questions.map((sq) => (
-                                    <div
-                                      key={sq.id}
-                                      className="flex items-center gap-3 p-3 bg-background rounded border"
-                                    >
-                                      <Badge className="bg-blue-100 text-blue-800 font-bold">
-                                        {sq.order_in_group}-sub
-                                      </Badge>
-                                      <span className="flex-1 text-sm">{sq.text}</span>
-                                      <Badge className="bg-green-100 text-green-800">Javob: {sq.correct_answer}</Badge>
-                                      <span className="text-xs text-muted-foreground font-mono">
-                                        #{sq.question_number}
-                                      </span>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </Fragment>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                  ))
+                ) : !groups || groups.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                      <FolderTree className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm font-medium">Hozircha Y2 guruhlar yo&apos;q</p>
+                      <p className="text-xs mt-1">Yangi guruh qo'shish uchun tugmani bosing</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  groups.map((group, index) => (
+                    <TableRow key={group.id} className="h-14">
+                      <TableCell className="text-center font-mono text-sm text-muted-foreground">{index + 1}</TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Badge variant="secondary" className="text-xs">
+                          {group.section_title}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <p className="text-sm line-clamp-2 max-w-xs lg:max-w-md">{group.stem}</p>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge className="bg-purple-100 text-purple-800">{group.questions?.length || 0}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-0.5 justify-center">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleViewGroup(group)}
+                            title="Ko'rish"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleDelete(group.id)}
+                            title="O'chirish"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
+      {isMobile ? (
+        <Sheet open={isViewOpen} onOpenChange={setIsViewOpen}>
+          <SheetContent side="bottom" className="h-[90vh] overflow-y-auto rounded-t-xl">
+            <SheetHeader className="pb-4 border-b">
+              <SheetTitle className="flex items-center gap-2">
+                <span>Y2 Guruh</span>
+                <Badge className="bg-purple-100 text-purple-800">
+                  {viewingGroup?.questions?.length || 0} ta sub-savol
+                </Badge>
+              </SheetTitle>
+            </SheetHeader>
+            {viewingGroup && <GroupDetails group={viewingGroup} />}
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <span>Y2 Guruh</span>
+                <Badge className="bg-purple-100 text-purple-800">
+                  {viewingGroup?.questions?.length || 0} ta sub-savol
+                </Badge>
+              </DialogTitle>
+            </DialogHeader>
+            {viewingGroup && <GroupDetails group={viewingGroup} />}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Create Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -312,7 +323,9 @@ export function QuestionGroupManager() {
 
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label>Bo&apos;lim</Label>
+              <Label>
+                Bo&apos;lim <span className="text-destructive">*</span>
+              </Label>
               <Select value={formData.sectionId} onValueChange={(v) => setFormData({ ...formData, sectionId: v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Bo'limni tanlang" />
@@ -328,7 +341,9 @@ export function QuestionGroupManager() {
             </div>
 
             <div className="space-y-2">
-              <Label>Umumiy savol matni (stem)</Label>
+              <Label>
+                Umumiy savol matni (stem) <span className="text-destructive">*</span>
+              </Label>
               <Textarea
                 rows={3}
                 value={formData.stem}
@@ -337,12 +352,16 @@ export function QuestionGroupManager() {
               />
             </div>
 
-            <div className="space-y-4">
-              <Label>Variantlar (A-F)</Label>
-              <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
+              <Label>
+                Variantlar (A-F) <span className="text-destructive">*</span>
+              </Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {["A", "B", "C", "D", "E", "F"].map((letter) => (
-                  <div key={letter} className="space-y-1">
-                    <Label className="text-sm text-muted-foreground">{letter}</Label>
+                  <div key={letter} className="flex items-center gap-2">
+                    <Badge variant="outline" className="shrink-0 w-8 justify-center">
+                      {letter}
+                    </Badge>
                     <Input
                       value={formData[`option${letter}` as keyof typeof formData]}
                       onChange={(e) => setFormData({ ...formData, [`option${letter}`]: e.target.value })}
@@ -353,9 +372,11 @@ export function QuestionGroupManager() {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label>Sub-savollar</Label>
+                <Label>
+                  Sub-savollar <span className="text-destructive">*</span>
+                </Label>
                 <Button type="button" variant="outline" size="sm" onClick={handleAddSubQuestion}>
                   <Plus className="h-4 w-4 mr-1" />
                   Qo&apos;shish
@@ -364,15 +385,16 @@ export function QuestionGroupManager() {
 
               <div className="space-y-3">
                 {subQuestions.map((sq, index) => (
-                  <Card key={index}>
+                  <Card key={index} className="border-dashed">
                     <CardContent className="p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <Badge variant="outline">{index + 1}-sub-savol</Badge>
+                        <Badge variant="secondary">{index + 1}-sub-savol</Badge>
                         {subQuestions.length > 1 && (
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon"
+                            className="h-8 w-8"
                             onClick={() => handleRemoveSubQuestion(index)}
                           >
                             <X className="h-4 w-4" />
@@ -380,23 +402,18 @@ export function QuestionGroupManager() {
                         )}
                       </div>
 
-                      <div className="space-y-2">
-                        <Label className="text-sm">Savol matni</Label>
+                      <div className="grid grid-cols-1 sm:grid-cols-[1fr,120px] gap-3">
                         <Input
                           value={sq.text}
                           onChange={(e) => handleSubQuestionChange(index, "text", e.target.value)}
                           placeholder="Sub-savol matnini kiriting..."
                         />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-sm">To&apos;g&apos;ri javob</Label>
                         <Select
                           value={sq.correctAnswer}
                           onValueChange={(v) => handleSubQuestionChange(index, "correctAnswer", v)}
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder="Tanlang" />
+                            <SelectValue placeholder="Javob" />
                           </SelectTrigger>
                           <SelectContent>
                             {["A", "B", "C", "D", "E", "F"].map((opt) => (
@@ -414,7 +431,7 @@ export function QuestionGroupManager() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Bekor qilish
             </Button>
@@ -431,6 +448,53 @@ export function QuestionGroupManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function GroupDetails({ group }: { group: QuestionGroup }) {
+  return (
+    <div className="space-y-5 pt-4">
+      <div>
+        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Bo'lim</Label>
+        <p className="font-medium mt-1">{group.section_title}</p>
+      </div>
+
+      <div>
+        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Savol matni (Stem)</Label>
+        <p className="mt-1 p-3 bg-muted rounded-lg text-sm leading-relaxed">{group.stem}</p>
+      </div>
+
+      <div>
+        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Variantlar (A-F)</Label>
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {Object.entries(group.options || {}).map(([key, value]) => (
+            <div key={key} className="flex items-start gap-2 p-2 bg-muted/50 rounded border">
+              <Badge variant="outline" className="shrink-0">
+                {key}
+              </Badge>
+              <span className="text-sm">{value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Sub-savollar</Label>
+        <div className="mt-2 space-y-2">
+          {!group.questions || group.questions.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic p-3 bg-muted/50 rounded">Sub-savollar mavjud emas</p>
+          ) : (
+            group.questions.map((sq) => (
+              <div key={sq.id} className="flex items-center gap-3 p-3 bg-background rounded-lg border">
+                <Badge className="bg-blue-100 text-blue-800 shrink-0">{sq.order_in_group}</Badge>
+                <span className="flex-1 text-sm">{sq.text}</span>
+                <Badge className="bg-green-100 text-green-800 shrink-0">{sq.correct_answer}</Badge>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   )
 }

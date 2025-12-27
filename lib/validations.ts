@@ -50,6 +50,7 @@ export const saveAnswersBatchSchema = z.object({
       z.object({
         questionId: z.number().int().positive(),
         answer: z.string().max(5000).optional(),
+        selectedOptionId: z.string().max(50).optional(),
         imageUrls: z.array(z.string().url()).max(5).optional(),
       }),
     )

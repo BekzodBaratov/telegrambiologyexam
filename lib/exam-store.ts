@@ -8,6 +8,7 @@ import { EXAM_CONFIG } from "./constants"
 interface Answer {
   questionId: number
   answer?: string
+  selectedOptionId?: string // Add selectedOptionId for randomization-safe answer tracking
   imageUrls?: string[]
   savedAt?: number // Track when answer was saved
 }
@@ -111,7 +112,8 @@ export const useExamStoreBase = create<ExamState>()(
             const existing = state.answers[existingIndex]
             if (
               existing.answer === answer.answer &&
-              JSON.stringify(existing.imageUrls) === JSON.stringify(answer.imageUrls)
+              JSON.stringify(existing.imageUrls) === JSON.stringify(answer.imageUrls) &&
+              existing.selectedOptionId === answer.selectedOptionId
             ) {
               return state // No change, don't update
             }
@@ -207,6 +209,7 @@ export function useDebouncedAnswerSave(attemptId: number | null, debounceMs = 10
             questionId: a.questionId,
             answer: a.answer,
             imageUrls: a.imageUrls,
+            selectedOptionId: a.selectedOptionId,
           })),
         }),
       })
@@ -250,6 +253,4 @@ export function useDebouncedAnswerSave(attemptId: number | null, debounceMs = 10
       }
     }
   }, [attemptId, flush])
-
-  return { queueAnswer, flush, isSaving, lastSaveError, pendingCount: pendingRef.current.size }
 }

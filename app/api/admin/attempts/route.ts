@@ -43,9 +43,15 @@ export async function GET(request: Request) {
         sa.started_at,
         sa.finished_at,
         sa.final_score,
+        sa.part1_score,
+        sa.part2_score,
+        sa.percentage,
         sa.certificate_level,
         s.full_name as student_name,
         s.telegram_id,
+        s.region,
+        s.district,
+        s.phone_number,
         e.name as exam_name,
         -- Simplified O2 check
         EXISTS (

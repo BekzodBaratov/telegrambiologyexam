@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
+import { generateOptionId } from "@/lib/option-utils"
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -40,6 +41,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       questionNumber = section.prev_count + section.current_count + 1
     }
 
+    let correctOptionId: string | null = null
+    if (correctAnswer && correctAnswer.match(/^[A-Z]$/i)) {
+      correctOptionId = generateOptionId(Number(id), correctAnswer)
+    }
+
     const [question] = await sql`
       UPDATE questions
       SET section_id = ${sectionId},
@@ -48,6 +54,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           text = ${text},
           options = ${options ? JSON.stringify(options) : null},
           correct_answer = ${correctAnswer},
+          correct_option_id = ${correctOptionId},
           image_url = ${imageUrl}
       WHERE id = ${id}
       RETURNING *

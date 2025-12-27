@@ -55,6 +55,8 @@ interface QuestionGroup {
 interface DisplayItem {
   type: "question" | "group"
   data: Question | QuestionGroup
+  displayNumber: number
+  displayNumberEnd?: number
 }
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
@@ -86,6 +88,7 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
 
     const items: DisplayItem[] = []
     const processedGroupIds = new Set<number>()
+    let displayNumber = 1
 
     for (const q of questions) {
       if (q.group_id !== null) {
@@ -93,6 +96,8 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
         processedGroupIds.add(q.group_id)
 
         const groupQuestions = questions.filter((gq) => gq.group_id === q.group_id)
+        const startNumber = displayNumber
+        displayNumber += groupQuestions.length
 
         items.push({
           type: "group",
@@ -102,12 +107,16 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
             options: q.options || {},
             subQuestions: groupQuestions,
           } as QuestionGroup,
+          displayNumber: startNumber,
+          displayNumberEnd: displayNumber - 1,
         })
       } else {
         items.push({
           type: "question",
           data: q,
+          displayNumber: displayNumber,
         })
+        displayNumber++
       }
     }
 
@@ -186,8 +195,8 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
   }, [attemptId, examStore])
 
   const handleAnswerChange = useCallback(
-    (questionId: number, answer: string) => {
-      const answerData = { questionId, answer }
+    (questionId: number, answer: string, optionId?: string) => {
+      const answerData = { questionId, answer, selectedOptionId: optionId }
       examStore.saveAnswer(answerData)
       queueAnswer(answerData)
     },
@@ -300,12 +309,13 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
       if (questionType === "Y1") {
         return (
           <QuestionY1
-            questionNumber={question.question_number}
+            questionNumber={currentItem.displayNumber}
+            questionId={question.id}
             text={question.text}
             options={question.options || {}}
             selectedAnswer={savedAnswer?.answer}
             imageUrl={question.image_url}
-            onAnswerChange={(answer) => handleAnswerChange(question.id, answer)}
+            onAnswerChange={(answer, optionId) => handleAnswerChange(question.id, answer, optionId)}
           />
         )
       }
@@ -313,11 +323,11 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
       if (questionType === "O1") {
         return (
           <QuestionO1
-            questionNumber={question.question_number}
+            questionNumber={currentItem.displayNumber}
             text={question.text}
             selectedAnswer={savedAnswer?.answer}
             imageUrl={question.image_url}
-            onAnswerChange={(answer) => handleAnswerChange(question.id, answer)}
+            onAnswerChange={(answer, optionId) => handleAnswerChange(question.id, answer, optionId)}
           />
         )
       }
@@ -344,6 +354,7 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
           subQuestions={group.subQuestions}
           savedAnswers={savedAnswers}
           onAnswerChange={handleAnswerChange}
+          startDisplayNumber={currentItem.displayNumber}
         />
       )
     }

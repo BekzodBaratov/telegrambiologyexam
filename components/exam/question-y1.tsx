@@ -7,15 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 interface QuestionY1Props {
   questionNumber: number
+  questionId: number
   text: string
   options: Record<string, string>
   selectedAnswer?: string
   imageUrl?: string | null
-  onAnswerChange: (answer: string) => void
+  onAnswerChange: (answer: string, optionId: string) => void
 }
 
 export function QuestionY1({
   questionNumber,
+  questionId,
   text,
   options,
   selectedAnswer,
@@ -30,8 +32,14 @@ export function QuestionY1({
 
   const handleChange = (value: string) => {
     setSelected(value)
-    onAnswerChange(value)
+    // This ID is independent of display order and used for validation
+    const optionId = `${questionId}_${value}`
+    onAnswerChange(value, optionId)
   }
+
+  // Display labels (A, B, C, D) are purely visual - actual key is sent to backend
+  const optionEntries = Object.entries(options)
+  const displayLabels = ["A", "B", "C", "D", "E", "F", "G", "H"]
 
   return (
     <Card>
@@ -54,19 +62,22 @@ export function QuestionY1({
       </CardHeader>
       <CardContent>
         <RadioGroup value={selected} onValueChange={handleChange} className="space-y-3">
-          {Object.entries(options).map(([key, value]) => (
-            <div
-              key={key}
-              className={`flex items-center space-x-3 rounded-lg border p-4 transition-colors ${
-                selected === key ? "border-primary bg-primary/5" : "hover:bg-muted/50"
-              }`}
-            >
-              <RadioGroupItem value={key} id={`q${questionNumber}-${key}`} />
-              <Label htmlFor={`q${questionNumber}-${key}`} className="flex-1 cursor-pointer text-sm">
-                <span className="font-semibold">{key})</span> {value}
-              </Label>
-            </div>
-          ))}
+          {optionEntries.map(([key, value], index) => {
+            const displayLabel = displayLabels[index] || key
+            return (
+              <div
+                key={key}
+                className={`flex items-center space-x-3 rounded-lg border p-4 transition-colors ${
+                  selected === key ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                }`}
+              >
+                <RadioGroupItem value={key} id={`q${questionNumber}-${key}`} />
+                <Label htmlFor={`q${questionNumber}-${key}`} className="flex-1 cursor-pointer text-sm">
+                  <span className="font-semibold">{displayLabel})</span> {value}
+                </Label>
+              </div>
+            )
+          })}
         </RadioGroup>
       </CardContent>
     </Card>

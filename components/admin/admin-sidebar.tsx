@@ -43,7 +43,7 @@ function NavigationContent({ onItemClick }: { onItemClick?: () => void }) {
 
   return (
     <>
-      <div className="mb-8">
+      <div className="mb-6">
         <h2 className="text-xl font-bold text-foreground">Biologiya</h2>
         <p className="text-sm text-muted-foreground">Admin Panel</p>
       </div>
@@ -55,12 +55,12 @@ function NavigationContent({ onItemClick }: { onItemClick?: () => void }) {
             <Button
               key={item.href}
               variant={isActive ? "secondary" : "ghost"}
-              className={cn("w-full justify-start", isActive && "bg-secondary")}
+              className={cn("w-full justify-start h-10", isActive && "bg-secondary font-medium")}
               asChild
               onClick={onItemClick}
             >
               <Link href={item.href}>
-                <item.icon className="mr-2 h-4 w-4" />
+                <item.icon className="mr-3 h-4 w-4" />
                 {item.label}
               </Link>
             </Button>
@@ -68,14 +68,16 @@ function NavigationContent({ onItemClick }: { onItemClick?: () => void }) {
         })}
       </nav>
 
-      <Button
-        variant="ghost"
-        className="w-full justify-start text-destructive hover:text-destructive"
-        onClick={handleLogout}
-      >
-        <LogOut className="mr-2 h-4 w-4" />
-        Chiqish
-      </Button>
+      <div className="pt-4 border-t">
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={handleLogout}
+        >
+          <LogOut className="mr-3 h-4 w-4" />
+          Chiqish
+        </Button>
+      </div>
     </>
   )
 }
@@ -94,6 +96,11 @@ export function AdminSidebar() {
     return () => window.removeEventListener("resize", checkMobile)
   }, [])
 
+  // Close sheet on route change
+  useEffect(() => {
+    setIsOpen(false)
+  }, [pathname])
+
   // Don't render sidebar on login page
   if (pathname === "/admin") {
     return null
@@ -104,14 +111,15 @@ export function AdminSidebar() {
       <>
         {/* Mobile header with hamburger */}
         <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 bg-background border-b lg:hidden">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" className="h-9 w-9">
                   <Menu className="h-5 w-5" />
+                  <span className="sr-only">Menu</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-64 p-4 flex flex-col">
+              <SheetContent side="left" className="w-72 p-4 flex flex-col">
                 <SheetHeader className="sr-only">
                   <SheetTitle>Menu</SheetTitle>
                 </SheetHeader>
@@ -121,8 +129,6 @@ export function AdminSidebar() {
             <span className="font-semibold">Biologiya Admin</span>
           </div>
         </div>
-        {/* Spacer for fixed header */}
-        <div className="h-14 lg:hidden" />
       </>
     )
   }

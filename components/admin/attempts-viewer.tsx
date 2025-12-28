@@ -3,7 +3,18 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
-import { Eye, Search, ChevronLeft, ChevronRight, Users, AlertCircle, FileCheck2, Clock, Trophy } from "lucide-react"
+import {
+  Eye,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Users,
+  AlertCircle,
+  FileCheck2,
+  Clock,
+  Trophy,
+  ChevronDown,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -56,15 +67,25 @@ interface PaginatedResponse {
 }
 
 interface Answer {
-  id: number
-  question_number: number
+  type: "Y1" | "Y2" | "O1" | "O2"
+  position: number
+  question_id?: number
   question_text: string
-  question_type_code: string
-  answer: string | null
-  image_urls: string[] | null
-  is_correct: boolean | null
-  score: number | null
-  teacher_score: number | null
+  group_id?: number
+  group_stem?: string
+  sub_questions?: Array<{
+    sub_position: number
+    question_id: number
+    question_text: string
+    student_answer: string | null
+    is_correct: boolean | null
+    score: number | null
+  }>
+  student_answer?: string | null
+  image_urls?: string[] | null
+  is_correct?: boolean | null
+  score?: number | null
+  teacher_score?: number | null
 }
 
 function getCertificateBadge(level: string | null): { level: string; color: string } | null {
@@ -101,6 +122,7 @@ export function AttemptsViewer() {
   const [selectedAttempt, setSelectedAttempt] = useState<Attempt | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const [expandedQuestions, setExpandedQuestions] = useState(false)
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -115,7 +137,7 @@ export function AttemptsViewer() {
     fetcher,
   )
 
-  const { data: answers, isLoading: loadingAnswers } = useSWR<Answer[]>(
+  const { data: answers, isLoading: loadingAnswers } = useSWR<{ questions: Answer[] }>(
     selectedAttempt ? `/api/admin/answers/${selectedAttempt.id}` : null,
     fetcher,
   )
@@ -127,6 +149,7 @@ export function AttemptsViewer() {
   const handleViewDetails = (attempt: Attempt) => {
     setSelectedAttempt(attempt)
     setIsDialogOpen(true)
+    setExpandedQuestions(false)
   }
 
   const getStatusBadge = (attempt: Attempt) => {
@@ -523,40 +546,165 @@ export function AttemptsViewer() {
               <Separator />
 
               {/* Answers Summary */}
-              {loadingAnswers ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-20 w-full" />
-                </div>
-              ) : answers && Array.isArray(answers) && answers.length > 0 ? (
-                <div>
-                  <h4 className="text-sm font-medium mb-3">Javoblar xulosasi</h4>
-                  <div className="grid grid-cols-4 gap-2 text-center text-sm">
-                    <div className="bg-muted/50 rounded p-3">
-                      <p className="text-lg font-bold">{answers.length}</p>
-                      <p className="text-xs text-muted-foreground">Jami</p>
-                    </div>
-                    <div className="bg-green-50 rounded p-3">
-                      <p className="text-lg font-bold text-green-600">
-                        {answers.filter((a) => a.is_correct === true).length}
+              {/* Added collapsible section for answers */}
+              <div>
+                <button
+                  onClick={() => setExpandedQuestions(!expandedQuestions)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors text-left"
+                >
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    Ishlangan testlar ({answers?.questions?.length || 0} ta)
+                  </h4>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${expandedQuestions ? "rotate-180" : ""}`} />
+                </button>
+
+                {expandedQuestions && (
+                  <div className="mt-4 space-y-4">
+                    {loadingAnswers ? (
+                      <div className="space-y-4">
+                        {[...Array(3)].map((_, i) => (
+                          <Skeleton key={i} className="h-24 w-full" />
+                        ))}
+                      </div>
+                    ) : answers && answers.questions && answers.questions.length > 0 ? (
+                      answers.questions.map((question: Answer, idx: number) => (
+                        <div key={idx} className="border rounded-lg p-4 bg-white dark:bg-slate-950">
+                          {/* Y1 / O1 Questions */}
+                          {(question.type === "Y1" || question.type === "O1") && (
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1">
+                                  <h5 className="text-sm font-medium leading-snug">
+                                    {question.position}. {question.question_text}
+                                  </h5>
+                                </div>
+                                <Badge variant="outline" className="flex-shrink-0 text-xs">
+                                  {question.type}
+                                </Badge>
+                              </div>
+
+                              <div className="bg-muted/40 rounded p-3 text-sm">
+                                <div className="font-medium text-foreground">
+                                  {question.student_answer || (
+                                    <span className="text-muted-foreground">Javob berilmadi</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {question.is_correct === true && (
+                                  <Badge className="bg-green-500 text-white text-xs">✓ To&apos;g&apos;ri</Badge>
+                                )}
+                                {question.is_correct === false && (
+                                  <Badge className="bg-red-500 text-white text-xs">✗ Noto&apos;g&apos;ri</Badge>
+                                )}
+                                {question.score !== null && (
+                                  <span className="text-xs text-muted-foreground">Ball: {question.score}</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Y2 Group Questions */}
+                          {question.type === "Y2" && (
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-2 mb-3">
+                                <div>
+                                  <Badge className="bg-blue-600 text-white mb-2 text-xs">Y2 — Savol guruhi</Badge>
+                                  <h5 className="text-sm font-medium leading-snug">
+                                    {question.position}. {question.group_stem}
+                                  </h5>
+                                </div>
+                              </div>
+
+                              <div className="space-y-3 border-l-2 border-blue-200 pl-4 ml-2">
+                                {question.sub_questions?.map((subQ, subIdx) => (
+                                  <div key={subIdx} className="space-y-2">
+                                    <p className="text-sm font-medium text-foreground">
+                                      {String.fromCharCode(65 + subIdx)}. {subQ.question_text}
+                                    </p>
+
+                                    <div className="bg-muted/40 rounded p-3 text-sm">
+                                      <div className="font-medium text-foreground">
+                                        {subQ.student_answer || (
+                                          <span className="text-muted-foreground">Javob berilmadi</span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                      {subQ.is_correct === true && (
+                                        <Badge className="bg-green-500 text-white text-xs">✓</Badge>
+                                      )}
+                                      {subQ.is_correct === false && (
+                                        <Badge className="bg-red-500 text-white text-xs">✗</Badge>
+                                      )}
+                                      {subQ.score !== null && (
+                                        <span className="text-xs text-muted-foreground">Ball: {subQ.score}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* O2 Free Response */}
+                          {question.type === "O2" && (
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1">
+                                  <Badge className="bg-purple-600 text-white mb-2 text-xs">O2 — Erkin javob</Badge>
+                                  <h5 className="text-sm font-medium leading-snug">
+                                    {question.position}. {question.question_text}
+                                  </h5>
+                                </div>
+                              </div>
+
+                              <div className="bg-muted/40 rounded p-3 text-sm">
+                                <div className="font-medium text-foreground">
+                                  {question.student_answer || (
+                                    <span className="text-muted-foreground">Javob berilmadi</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {question.image_urls && question.image_urls.length > 0 && (
+                                <div className="flex gap-2 flex-wrap">
+                                  {question.image_urls.map((url, i) => (
+                                    <img
+                                      key={i}
+                                      src={url || "/placeholder.svg"}
+                                      alt={`Javob rasmi ${i + 1}`}
+                                      className="h-20 w-20 object-cover rounded border"
+                                    />
+                                  ))}
+                                </div>
+                              )}
+
+                              <div className="pt-2">
+                                {question.teacher_score !== null ? (
+                                  <Badge className="bg-purple-100 text-purple-700 text-sm">
+                                    Ball: {question.teacher_score} / 100
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200">
+                                    Baholanmadi
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Ushbu urinishda savollar topilmadi
                       </p>
-                      <p className="text-xs text-muted-foreground">To&apos;g&apos;ri</p>
-                    </div>
-                    <div className="bg-red-50 rounded p-3">
-                      <p className="text-lg font-bold text-red-600">
-                        {answers.filter((a) => a.is_correct === false).length}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Noto&apos;g&apos;ri</p>
-                    </div>
-                    <div className="bg-gray-50 rounded p-3">
-                      <p className="text-lg font-bold text-gray-600">
-                        {answers.filter((a) => a.answer === null || a.answer === "").length}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Javobsiz</p>
-                    </div>
+                    )}
                   </div>
-                </div>
-              ) : null}
+                )}
+              </div>
 
               {/* O2 Evaluation Button - Fixed routing to proper URL */}
               {isPendingResult(selectedAttempt) && (

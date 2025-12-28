@@ -31,7 +31,6 @@ export async function GET(request: Request) {
           sa.answer,
           sa.image_urls,
           sa.teacher_score,
-          q.max_score,
           att.code_used as test_code
         FROM student_answers sa
         JOIN student_attempts att ON sa.attempt_id = att.id
@@ -59,7 +58,6 @@ export async function GET(request: Request) {
           sa.answer,
           sa.image_urls,
           sa.teacher_score,
-          q.max_score,
           att.code_used as test_code
         FROM student_answers sa
         JOIN student_attempts att ON sa.attempt_id = att.id
@@ -87,7 +85,6 @@ export async function GET(request: Request) {
           sa.answer,
           sa.image_urls,
           sa.teacher_score,
-          q.max_score,
           att.code_used as test_code
         FROM student_answers sa
         JOIN student_attempts att ON sa.attempt_id = att.id
@@ -115,7 +112,6 @@ export async function GET(request: Request) {
           sa.answer,
           sa.image_urls,
           sa.teacher_score,
-          q.max_score,
           att.code_used as test_code
         FROM student_answers sa
         JOIN student_attempts att ON sa.attempt_id = att.id
@@ -142,7 +138,6 @@ export async function GET(request: Request) {
           sa.answer,
           sa.image_urls,
           sa.teacher_score,
-          q.max_score,
           att.code_used as test_code
         FROM student_answers sa
         JOIN student_attempts att ON sa.attempt_id = att.id
@@ -168,7 +163,6 @@ export async function GET(request: Request) {
           sa.answer,
           sa.image_urls,
           sa.teacher_score,
-          q.max_score,
           att.code_used as test_code
         FROM student_answers sa
         JOIN student_attempts att ON sa.attempt_id = att.id
@@ -195,7 +189,6 @@ export async function GET(request: Request) {
           sa.answer,
           sa.image_urls,
           sa.teacher_score,
-          q.max_score,
           att.code_used as test_code
         FROM student_answers sa
         JOIN student_attempts att ON sa.attempt_id = att.id
@@ -222,7 +215,6 @@ export async function GET(request: Request) {
           sa.answer,
           sa.image_urls,
           sa.teacher_score,
-          q.max_score,
           att.code_used as test_code
         FROM student_answers sa
         JOIN student_attempts att ON sa.attempt_id = att.id

@@ -33,10 +33,9 @@ export async function POST(request: Request) {
     const { answerId, score } = validation.data
 
     const answerResult = await sql`
-      SELECT sa.id, sa.attempt_id, q.max_score,
+      SELECT sa.id, sa.attempt_id,
              att.status, att.part1_score, att.certificate_level
       FROM student_answers sa
-      JOIN questions q ON sa.question_id = q.id
       JOIN student_attempts att ON sa.attempt_id = att.id
       WHERE sa.id = ${answerId}
     `
@@ -47,7 +46,6 @@ export async function POST(request: Request) {
 
     const answer = answerResult[0]
     const attemptId = answer.attempt_id
-    const questionMaxScore = answer.max_score || 25
 
     if (answer.certificate_level !== null) {
       return NextResponse.json(
@@ -56,11 +54,7 @@ export async function POST(request: Request) {
       )
     }
 
-    if (score > questionMaxScore) {
-      return NextResponse.json({ message: `Ball ${questionMaxScore} dan oshmasligi kerak` }, { status: 400 })
-    }
-
-    // Save the teacher score
+    // Save the teacher score (0-100 scale)
     await sql`
       UPDATE student_answers
       SET teacher_score = ${score}, updated_at = NOW()
@@ -69,10 +63,13 @@ export async function POST(request: Request) {
 
     // Get all O2 answers for this attempt
     const o2AnswersResult = await sql`
-      SELECT sa.teacher_score, q.max_score
+      SELECT sa.teacher_score
       FROM student_answers sa
-      JOIN questions q ON sa.question_id = q.id
-      JOIN question_types qt ON q.question_type_id = qt.id
+      JOIN question_types qt ON sa.question_id = (
+        SELECT id FROM questions WHERE id = sa.question_id
+      ) AND qt.id = (
+        SELECT question_type_id FROM questions WHERE id = sa.question_id
+      )
       WHERE sa.attempt_id = ${attemptId}
         AND qt.code = 'O2'
     `
@@ -86,12 +83,9 @@ export async function POST(request: Request) {
     let certificateLevel: string | null = null
 
     if (allGraded && o2Answers.length > 0) {
-      // Calculate total O2 score (sum of teacher_score)
+      // If multiple O2 questions, average them
       const totalO2Score = o2Answers.reduce((sum, a) => sum + (Number(a.teacher_score) || 0), 0)
-      // Calculate max possible O2 score
-      const maxO2Score = o2Answers.reduce((sum, a) => sum + (Number(a.max_score) || 25), 0)
-      // Calculate part2_score as percentage (0-100 scale)
-      const part2Score = maxO2Score > 0 ? (totalO2Score / maxO2Score) * 100 : 0
+      const part2Score = o2Answers.length > 0 ? totalO2Score / o2Answers.length : 0
 
       const attemptStatus = answer.status
       const part1Score = answer.part1_score

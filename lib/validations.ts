@@ -96,8 +96,7 @@ export const testCodeSchema = z.object({
 
 export const o2ScoreSchema = z.object({
   answerId: z.number().int().positive("Noto'g'ri answer ID"),
-  score: z.number().min(0, "Ball 0 dan kam bo'lishi mumkin emas"),
-  maxScore: z.number().min(1).optional(),
+  score: z.number().min(0, "Ball 0 dan kam bo'lishi mumkin emas").max(100, "Ball 100 dan oshmasligi kerak"),
 })
 
 export const adminLoginSchema = z.object({

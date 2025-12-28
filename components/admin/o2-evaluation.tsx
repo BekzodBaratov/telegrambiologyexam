@@ -31,7 +31,6 @@ interface O2Answer {
   answer: string | null
   image_urls: string[] | null
   teacher_score: number | null
-  max_score: number
   test_code: string
 }
 
@@ -123,8 +122,8 @@ export function O2Evaluation() {
       setScoreError("Ball manfiy bo'lishi mumkin emas")
       return false
     }
-    if (numScore > currentAnswer.max_score) {
-      setScoreError(`Ball ${currentAnswer.max_score} dan oshmasligi kerak`)
+    if (numScore > 100) {
+      setScoreError("Ball 100 dan oshmasligi kerak")
       return false
     }
     setScoreError(null)
@@ -436,7 +435,7 @@ export function O2Evaluation() {
                 <div className="flex items-center justify-between">
                   <Label className="text-base font-medium">Baholash</Label>
                   <Badge variant="outline" className="text-base px-3 py-1">
-                    Max: {currentAnswer.max_score} ball
+                    Ball: 0–100
                   </Badge>
                 </div>
 
@@ -444,14 +443,14 @@ export function O2Evaluation() {
                   <Input
                     type="number"
                     min="0"
-                    max={currentAnswer.max_score}
-                    step="0.5"
+                    max="100"
+                    step="1"
                     value={score}
                     onChange={(e) => {
                       setScore(e.target.value)
                       setScoreError(null)
                     }}
-                    placeholder="Ball kiriting..."
+                    placeholder="0-100 orasida ball kiriting..."
                     className={`text-lg h-12 ${scoreError ? "border-destructive" : ""}`}
                   />
                   {scoreError && (

@@ -89,10 +89,10 @@ export function sanitizeInput(input: string): string {
 // Validate and sanitize Telegram ID
 export function validateTelegramId(id: string | number): string | null {
   const idStr = String(id)
-  // Telegram IDs are numeric only
-  if (!/^\d+$/.test(idStr)) return null
+  // Telegram IDs are numeric only, but dev mode uses dev_xxxxx format
+  if (!/^(\d+|dev_[a-z0-9]+)$/i.test(idStr)) return null
   // Reasonable length check
-  if (idStr.length > 20) return null
+  if (idStr.length > 30) return null
   return idStr
 }
 

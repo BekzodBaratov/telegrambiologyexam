@@ -9,19 +9,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Telegram ID topilmadi" }, { status: 400 })
     }
 
-    // Check if student exists and is verified
-    const [student] = await sql`
-      SELECT * FROM students 
-      WHERE telegram_id = ${telegramId}
-    `
+    let student = null
+    try {
+      const results = await sql`
+        SELECT id, full_name FROM students 
+        WHERE telegram_id = ${telegramId}
+      `
+      if (results && Array.isArray(results) && results.length > 0) {
+        student = results[0]
+      }
+    } catch (queryError) {
+      console.error("Check student error:", queryError)
+      return NextResponse.json({ message: "Server xatosi" }, { status: 500 })
+    }
 
-    if (student && student.is_verified) {
+    if (student) {
       // Check if student already took this test
       if (code) {
-        const [existingAttempt] = await sql`
-          SELECT sa.* FROM student_attempts sa
-          WHERE sa.student_id = ${student.id} AND sa.code_used = ${code}
-        `
+        let existingAttempt = null
+        try {
+          const attemptResults = await sql`
+            SELECT id FROM student_attempts
+            WHERE student_id = ${student.id} AND code_used = ${code}
+          `
+          if (attemptResults && Array.isArray(attemptResults) && attemptResults.length > 0) {
+            existingAttempt = attemptResults[0]
+          }
+        } catch (attemptError) {
+          console.error("Check attempt error:", attemptError)
+        }
 
         if (existingAttempt) {
           return NextResponse.json({

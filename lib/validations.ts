@@ -18,7 +18,7 @@ export const studentNameSchema = z.object({
 })
 
 export const registrationSchema = z.object({
-  telegramId: z.string().regex(/^\d+$/, "Noto'g'ri Telegram ID"),
+  telegramId: z.string().regex(/^(\d+|dev_[a-z0-9]+)$/i, "Noto'g'ri Telegram ID"),
   fullName: z
     .string()
     .min(2, "Ism kamida 2 belgidan iborat bo'lishi kerak")

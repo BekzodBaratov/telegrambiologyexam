@@ -14,6 +14,7 @@ import {
   Clock,
   Trophy,
   ChevronDown,
+  CheckCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -208,7 +209,12 @@ export function AttemptsViewer() {
   }
 
   const isPendingResult = (attempt: Attempt): boolean => {
-    return attempt.status === "completed" && attempt.has_o2 && !attempt.o2_fully_checked
+    // If the attempt is not completed, it's not pending - it's in progress
+    if (attempt.status !== "completed") return false
+    // If final_score is set, results are finalized
+    if (attempt.final_score !== null) return false
+    // Otherwise, it's pending O2 evaluation
+    return true
   }
 
   // Loading skeleton
@@ -392,12 +398,20 @@ export function AttemptsViewer() {
 
           {selectedAttempt && (
             <div className="mt-6 space-y-6">
-              {/* Pending O2 Warning */}
               {isPendingResult(selectedAttempt) && (
                 <Alert className="border-orange-200 bg-orange-50">
                   <AlertCircle className="h-4 w-4 text-orange-600" />
                   <AlertDescription className="text-orange-800">
-                    Bu urinish O2 baholashni kutmoqda. Yakuniy natija O2 tekshirilgandan keyin aniqlanadi.
+                    O2 savollari to'liq baholanmagan. Yakuniy natija chiqarilmagan.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {selectedAttempt.final_score !== null && (
+                <Alert className="border-green-200 bg-green-50">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-800">
+                    Bu urinish natijalari tasdiqlangan. O'zgartirib bo'lmaydi.
                   </AlertDescription>
                 </Alert>
               )}

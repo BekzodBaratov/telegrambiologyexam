@@ -145,6 +145,18 @@ export function O2Evaluation() {
         }),
       })
 
+      if (response.status === 403) {
+        const errorData = await response.json().catch(() => ({}))
+        toast({
+          title: "O'zgartirib bo'lmaydi",
+          description: errorData.message || "Bu urinish natijalari allaqachon tasdiqlangan",
+          variant: "destructive",
+        })
+        // Refresh the list to remove this answer from ungraded list
+        await mutateAnswers()
+        return
+      }
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.message || "Xatolik yuz berdi")
@@ -160,13 +172,13 @@ export function O2Evaluation() {
           : "Sertifikat berilmadi (ball 46% dan past)"
         toast({
           title: "Natijalar tasdiqlandi",
-          description: `${currentAnswer.student_name} - yakuniy ball hisoblandi. ${certMessage}`,
+          description: `${currentAnswer.student_name} - yakuniy ball hisoblandi. ${certMessage}. Natija qulflangi.`,
           duration: 5000,
         })
       } else if (result.allO2Graded) {
         toast({
           title: "Baholandi",
-          description: `${currentAnswer.student_name} - barcha O2 savollari baholandi. Part 2 ball hisoblandi.`,
+          description: `${currentAnswer.student_name} - barcha O2 savollari baholandi. Part 2 ball: ${result.part2Score?.toFixed(1) || "—"}`,
         })
       } else {
         toast({

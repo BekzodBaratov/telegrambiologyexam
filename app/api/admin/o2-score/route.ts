@@ -3,7 +3,7 @@ import { sql } from "@/lib/db"
 import { o2ScoreSchema } from "@/lib/validations"
 import { getCurrentUser } from "@/lib/auth"
 
-function getCertificateLevel(percentage: number): "C" | "B" | "B+" | "A" | "A+" | null {
+function getCertificateLevel(percentage: number): "C" | "C+" | "B" | "B+" | "A" | "A+" | null {
   if (percentage >= 70.0) return "A+"
   if (percentage >= 65.0) return "A"
   if (percentage >= 60.0) return "B+"
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
     const answerResult = await sql`
       SELECT sa.id, sa.attempt_id,
-             att.status, att.part1_score, att.certificate_level
+             att.status, att.part1_score, att.final_score
       FROM student_answers sa
       JOIN student_attempts att ON sa.attempt_id = att.id
       WHERE sa.id = ${answerId}
@@ -47,7 +47,8 @@ export async function POST(request: Request) {
     const answer = answerResult[0]
     const attemptId = answer.attempt_id
 
-    if (answer.certificate_level !== null) {
+    // If final_score is NOT NULL, the attempt is finalized and cannot be modified
+    if (answer.final_score !== null) {
       return NextResponse.json(
         { message: "Bu urinish natijalari allaqachon tasdiqlangan va o'zgartirib bo'lmaydi" },
         { status: 403 },
@@ -61,35 +62,35 @@ export async function POST(request: Request) {
       WHERE id = ${answerId}
     `
 
-    // Get all O2 answers for this attempt
     const o2AnswersResult = await sql`
       SELECT sa.teacher_score
       FROM student_answers sa
-      JOIN question_types qt ON sa.question_id = (
-        SELECT id FROM questions WHERE id = sa.question_id
-      ) AND qt.id = (
-        SELECT question_type_id FROM questions WHERE id = sa.question_id
-      )
+      JOIN questions q ON sa.question_id = q.id
+      JOIN question_types qt ON q.question_type_id = qt.id
       WHERE sa.attempt_id = ${attemptId}
         AND qt.code = 'O2'
     `
 
     const o2Answers = Array.isArray(o2AnswersResult) ? o2AnswersResult : []
 
-    // Check if all O2 questions have been graded
-    const allGraded = o2Answers.every((a) => a.teacher_score !== null)
+    // teacher_score = 0 is valid (treated as graded), only NULL means "not graded"
+    const allO2Graded = o2Answers.length > 0 && o2Answers.every((a) => a.teacher_score !== null)
 
     let finalCalculated = false
     let certificateLevel: string | null = null
+    let part2Score: number | null = null
 
-    if (allGraded && o2Answers.length > 0) {
-      // If multiple O2 questions, average them
+    if (allO2Graded) {
+      // Calculate part2_score as average of all O2 scores
       const totalO2Score = o2Answers.reduce((sum, a) => sum + (Number(a.teacher_score) || 0), 0)
-      const part2Score = o2Answers.length > 0 ? totalO2Score / o2Answers.length : 0
+      part2Score = o2Answers.length > 0 ? totalO2Score / o2Answers.length : 0
 
       const attemptStatus = answer.status
       const part1Score = answer.part1_score
 
+      // 1. allO2Graded === true (already checked above)
+      // 2. part1_score IS NOT NULL
+      // 3. status === 'completed'
       if (attemptStatus === "completed" && part1Score !== null) {
         const finalScore = (Number(part1Score) + part2Score) / 2
         const percentage = finalScore // percentage equals final_score per spec
@@ -107,7 +108,7 @@ export async function POST(request: Request) {
         `
         finalCalculated = true
       } else {
-        // Only update part2_score if preconditions not met
+        // Only update part2_score if preconditions not fully met
         await sql`
           UPDATE student_attempts
           SET part2_score = ${part2Score}, updated_at = NOW()
@@ -118,10 +119,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      allO2Graded: allGraded,
+      allO2Graded,
       o2Count: o2Answers.length,
       finalCalculated,
       certificateLevel,
+      part2Score,
     })
   } catch (error) {
     console.error("Save O2 score error:", error)

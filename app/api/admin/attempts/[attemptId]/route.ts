@@ -47,7 +47,11 @@ interface AttemptDetailsResponse {
     part1_score: number | null
     part2_score: number | null
     final_score: number | null
+    percentage: number | null
     certificate_level: string | null
+    has_o2: boolean
+    all_o2_graded: boolean
+    is_finalized: boolean
   }
   questions: AttemptQuestionItem[]
 }
@@ -68,7 +72,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ atte
         part1_score,
         part2_score,
         final_score,
-        certificate_level
+        percentage,
+        certificate_level,
+        exam_id
       FROM student_attempts
       WHERE id = ${id}
     `
@@ -78,6 +84,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ atte
     }
 
     const attempt = attemptRows[0] as any
+
+    const o2StatusResult = await sql`
+      SELECT 
+        COUNT(*) as total_o2,
+        COUNT(sa.teacher_score) as graded_o2
+      FROM student_answers sa
+      JOIN questions q ON sa.question_id = q.id
+      JOIN question_types qt ON q.question_type_id = qt.id
+      WHERE sa.attempt_id = ${id}
+        AND qt.code = 'O2'
+    `
+
+    const o2Status =
+      Array.isArray(o2StatusResult) && o2StatusResult.length > 0 ? o2StatusResult[0] : { total_o2: 0, graded_o2: 0 }
+
+    const hasO2 = Number(o2Status.total_o2) > 0
+    const allO2Graded = hasO2 ? Number(o2Status.graded_o2) === Number(o2Status.total_o2) : true
+    const isFinalized = attempt.final_score !== null
 
     const answersRows = await sql`
       SELECT 
@@ -99,7 +123,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ atte
       JOIN questions q ON sa.question_id = q.id
       JOIN question_types qt ON q.question_type_id = qt.id
       JOIN exam_questions eq ON eq.question_id = q.id 
-        AND eq.exam_id = (SELECT exam_id FROM student_attempts WHERE id = ${id})
+        AND eq.exam_id = ${attempt.exam_id}
       LEFT JOIN question_groups qg ON q.group_id = qg.id
       WHERE sa.attempt_id = ${id}
       ORDER BY eq.position ASC, q.order_in_group ASC, sa.question_id ASC
@@ -116,11 +140,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ atte
     for (const row of answersRows) {
       const row_any = row as any
 
-      // Handle Y2 grouped questions
       if (row_any.question_type_code === "Y2" && row_any.group_id) {
         const groupId = row_any.group_id
 
-        // Only process each group once, collect all sub-questions
         if (!processedGroups.has(groupId)) {
           processedGroups.add(groupId)
 
@@ -128,7 +150,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ atte
           const groupPosition = row_any.exam_position
           const groupStem = row_any.group_stem
 
-          // Collect all sub-questions for this group
           for (const subRow of answersRows) {
             const subRow_any = subRow as any
             if (subRow_any.group_id === groupId && subRow_any.question_type_code === "Y2") {
@@ -154,7 +175,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ atte
         continue
       }
 
-      // Handle Y1 and O1 questions (single answer questions)
       if (row_any.question_type_code === "Y1" || row_any.question_type_code === "O1") {
         const position = row_any.exam_position
 
@@ -174,7 +194,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ atte
         continue
       }
 
-      // Handle O2 questions
       if (row_any.question_type_code === "O2") {
         const position = row_any.exam_position
 
@@ -210,7 +229,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ atte
         part1_score: attempt.part1_score,
         part2_score: attempt.part2_score,
         final_score: attempt.final_score,
+        percentage: attempt.percentage,
         certificate_level: attempt.certificate_level,
+        has_o2: hasO2,
+        all_o2_graded: allO2Graded,
+        is_finalized: isFinalized,
       },
       questions,
     }

@@ -60,9 +60,17 @@ interface DisplayItem {
   displayNumberEnd?: number
 }
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const fetcher = async (url: string) => {
+  console.log("[v0] ExamPart1 fetching:", url)
+  const res = await fetch(url)
+  const data = await res.json()
+  console.log("[v0] ExamPart1 fetched questions:", data?.length, "questions")
+  return data
+}
 
 function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpired }: ExamPart1Props) {
+  console.log("[v0] ExamPart1Content rendering with:", { examId, attemptId, examName })
+
   const [currentIndex, setCurrentIndex] = useState(0)
   const [showFinishDialog, setShowFinishDialog] = useState(false)
   const [showLeaveWarning, setShowLeaveWarning] = useState(false)
@@ -84,44 +92,59 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
     errorRetryInterval: 2000,
   })
 
+  console.log("[v0] ExamPart1 questions state:", {
+    isLoading,
+    hasError: !!questionsError,
+    questionsCount: questions?.length,
+  })
+
   const displayItems: DisplayItem[] = useMemo(() => {
+    console.log("[v0] Computing displayItems, questions:", questions?.length)
     if (!questions) return []
 
-    const items: DisplayItem[] = []
-    const processedGroupIds = new Set<number>()
-    let displayNumber = 1
+    try {
+      const items: DisplayItem[] = []
+      const processedGroupIds = new Set<number>()
+      let displayNumber = 1
 
-    for (const q of questions) {
-      if (q.group_id !== null) {
-        if (processedGroupIds.has(q.group_id)) continue
-        processedGroupIds.add(q.group_id)
+      for (const q of questions) {
+        console.log("[v0] Processing question:", q.id, "group_id:", q.group_id, "type:", q.question_type?.code)
 
-        const groupQuestions = questions.filter((gq) => gq.group_id === q.group_id)
-        const startNumber = displayNumber
-        displayNumber += groupQuestions.length
+        if (q.group_id !== null) {
+          if (processedGroupIds.has(q.group_id)) continue
+          processedGroupIds.add(q.group_id)
 
-        items.push({
-          type: "group",
-          data: {
-            id: q.group_id,
-            stem: groupQuestions[0]?.text || "",
-            options: q.options || {},
-            subQuestions: groupQuestions,
-          } as QuestionGroup,
-          displayNumber: startNumber,
-          displayNumberEnd: displayNumber - 1,
-        })
-      } else {
-        items.push({
-          type: "question",
-          data: q,
-          displayNumber: displayNumber,
-        })
-        displayNumber++
+          const groupQuestions = questions.filter((gq) => gq.group_id === q.group_id)
+          const startNumber = displayNumber
+          displayNumber += groupQuestions.length
+
+          items.push({
+            type: "group",
+            data: {
+              id: q.group_id,
+              stem: groupQuestions[0]?.text || "",
+              options: q.options || {},
+              subQuestions: groupQuestions,
+            } as QuestionGroup,
+            displayNumber: startNumber,
+            displayNumberEnd: displayNumber - 1,
+          })
+        } else {
+          items.push({
+            type: "question",
+            data: q,
+            displayNumber: displayNumber,
+          })
+          displayNumber++
+        }
       }
-    }
 
-    return items
+      console.log("[v0] displayItems computed:", items.length, "items")
+      return items
+    } catch (err) {
+      console.error("[v0] Error computing displayItems:", err)
+      return []
+    }
   }, [questions])
 
   const currentItem = displayItems[currentIndex]
@@ -278,6 +301,83 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
     return indices
   }, [displayItems, examStore])
 
+  const renderItem = () => {
+    console.log("[v0] renderItem called, currentItem:", currentItem?.type, "index:", currentIndex)
+
+    if (!currentItem) {
+      console.log("[v0] No currentItem to render")
+      return null
+    }
+
+    try {
+      if (currentItem.type === "question") {
+        const question = currentItem.data as Question
+        const questionType = question.question_type?.code
+        const savedAnswer = examStore.getAnswer(question.id)
+
+        console.log("[v0] Rendering question:", question.id, "type:", questionType)
+
+        if (questionType === "Y1") {
+          return (
+            <QuestionY1
+              questionNumber={currentItem.displayNumber}
+              questionId={question.id}
+              text={question.text}
+              options={question.options || {}}
+              selectedAnswer={savedAnswer?.answer}
+              imageUrl={question.image_url}
+              onAnswerChange={(answer, optionId) => handleAnswerChange(question.id, answer, optionId)}
+            />
+          )
+        }
+
+        if (questionType === "O1") {
+          return (
+            <QuestionO1
+              questionNumber={currentItem.displayNumber}
+              text={question.text}
+              selectedAnswer={savedAnswer?.answer}
+              imageUrl={question.image_url}
+              onAnswerChange={(answer, optionId) => handleAnswerChange(question.id, answer, optionId)}
+            />
+          )
+        }
+
+        console.log("[v0] Unknown question type:", questionType)
+        return null
+      }
+
+      if (currentItem.type === "group") {
+        const group = currentItem.data as QuestionGroup
+        console.log("[v0] Rendering group:", group.id, "subQuestions:", group.subQuestions?.length)
+
+        const savedAnswers: Record<number, string> = {}
+        group.subQuestions.forEach((sq) => {
+          const answer = examStore.getAnswer(sq.id)
+          if (answer?.answer) {
+            savedAnswers[sq.id] = answer.answer
+          }
+        })
+
+        return (
+          <QuestionY2Group
+            groupId={group.id}
+            stem={group.stem}
+            options={group.options}
+            subQuestions={group.subQuestions}
+            savedAnswers={savedAnswers}
+            onAnswerChange={handleAnswerChange}
+            startDisplayNumber={currentItem.displayNumber}
+          />
+        )
+      }
+    } catch (err) {
+      console.error("[v0] Error rendering item:", err)
+    }
+
+    return null
+  }
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -294,70 +394,6 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
         <Button onClick={() => window.location.reload()}>Qayta urinish</Button>
       </div>
     )
-  }
-
-  const renderItem = () => {
-    if (!currentItem) return null
-
-    if (currentItem.type === "question") {
-      const question = currentItem.data as Question
-      const questionType = question.question_type?.code
-      const savedAnswer = examStore.getAnswer(question.id)
-
-      if (questionType === "Y1") {
-        return (
-          <QuestionY1
-            questionNumber={currentItem.displayNumber}
-            questionId={question.id}
-            text={question.text}
-            options={question.options || {}}
-            selectedAnswer={savedAnswer?.answer}
-            imageUrl={question.image_url}
-            onAnswerChange={(answer, optionId) => handleAnswerChange(question.id, answer, optionId)}
-          />
-        )
-      }
-
-      if (questionType === "O1") {
-        return (
-          <QuestionO1
-            questionNumber={currentItem.displayNumber}
-            text={question.text}
-            selectedAnswer={savedAnswer?.answer}
-            imageUrl={question.image_url}
-            onAnswerChange={(answer, optionId) => handleAnswerChange(question.id, answer, optionId)}
-          />
-        )
-      }
-
-      return null
-    }
-
-    if (currentItem.type === "group") {
-      const group = currentItem.data as QuestionGroup
-
-      const savedAnswers: Record<number, string> = {}
-      group.subQuestions.forEach((sq) => {
-        const answer = examStore.getAnswer(sq.id)
-        if (answer?.answer) {
-          savedAnswers[sq.id] = answer.answer
-        }
-      })
-
-      return (
-        <QuestionY2Group
-          groupId={group.id}
-          stem={group.stem}
-          options={group.options}
-          subQuestions={group.subQuestions}
-          savedAnswers={savedAnswers}
-          onAnswerChange={handleAnswerChange}
-          startDisplayNumber={currentItem.displayNumber}
-        />
-      )
-    }
-
-    return null
   }
 
   return (

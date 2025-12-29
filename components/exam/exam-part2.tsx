@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { ExamSecurityWrapper } from "./exam-security-wrapper"
 
 interface ExamResultData {
   finalScore: number
@@ -249,147 +250,149 @@ export function ExamPart2({ examId, attemptId, examName, onComplete }: ExamPart2
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <ExamHeader
-        title="41-43 Savollar"
-        examName={examName}
-        attemptId={attemptId}
-        part="part2"
-        onTimeUp={handleTimeUp}
-      />
+    <ExamSecurityWrapper attemptId={attemptId} part="part2">
+      <div className="min-h-screen bg-background pb-24">
+        <ExamHeader
+          title="41-43 Savollar"
+          examName={examName}
+          attemptId={attemptId}
+          part="part2"
+          onTimeUp={handleTimeUp}
+        />
 
-      {networkError && (
-        <div className="bg-amber-100 border-b border-amber-200 px-4 py-2 text-sm text-amber-800 flex items-center gap-2">
-          <WifiOff className="h-4 w-4" />
-          <span>Internet aloqasi yo'q. Javoblar saqlanmayapti.</span>
-        </div>
-      )}
-
-      <div className="p-4 space-y-4">
-        <div className="flex justify-center gap-2">
-          {questions?.map((_: unknown, i: number) => (
-            <Button
-              key={i}
-              variant={currentIndex === i ? "default" : "outline"}
-              size="sm"
-              onClick={() => setCurrentIndex(i)}
-              className={answeredQuestions.includes(i) ? "bg-green-500 text-white hover:bg-green-600" : ""}
-            >
-              {41 + i}
-            </Button>
-          ))}
-        </div>
-
-        {currentQuestion && (
-          <QuestionO2
-            questionNumber={currentQuestion.question_number}
-            text={currentQuestion.text}
-            selectedAnswer={savedAnswer?.answer}
-            selectedImages={savedAnswer?.imageUrls}
-            onAnswerChange={handleAnswerChange}
-          />
+        {networkError && (
+          <div className="bg-amber-100 border-b border-amber-200 px-4 py-2 text-sm text-amber-800 flex items-center gap-2">
+            <WifiOff className="h-4 w-4" />
+            <span>Internet aloqasi yo'q. Javoblar saqlanmayapti.</span>
+          </div>
         )}
-      </div>
 
-      <div className="fixed bottom-0 left-0 right-0 border-t bg-background p-4">
-        <div className="flex items-center justify-between gap-4">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-            disabled={currentIndex === 0}
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Oldingi
-          </Button>
+        <div className="p-4 space-y-4">
+          <div className="flex justify-center gap-2">
+            {questions?.map((_: unknown, i: number) => (
+              <Button
+                key={i}
+                variant={currentIndex === i ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCurrentIndex(i)}
+                className={answeredQuestions.includes(i) ? "bg-green-500 text-white hover:bg-green-600" : ""}
+              >
+                {41 + i}
+              </Button>
+            ))}
+          </div>
 
-          {currentIndex === (questions?.length || 3) - 1 ? (
-            <Button onClick={() => setShowFinishDialog(true)}>
-              <Flag className="h-4 w-4 mr-1" />
-              Imtihonni tugatish
-            </Button>
-          ) : (
-            <Button onClick={() => setCurrentIndex((i) => Math.min((questions?.length || 3) - 1, i + 1))}>
-              Keyingi
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
+          {currentQuestion && (
+            <QuestionO2
+              questionNumber={currentQuestion.question_number}
+              text={currentQuestion.text}
+              selectedAnswer={savedAnswer?.answer}
+              selectedImages={savedAnswer?.imageUrls}
+              onAnswerChange={handleAnswerChange}
+            />
           )}
         </div>
-      </div>
 
-      <AlertDialog open={showFinishDialog} onOpenChange={setShowFinishDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Imtihonni tugatishni xohlaysizmi?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {answeredQuestions.length} / {questions?.length || 3} savolga javob berildi. Tugatganingizdan keyin
-              javoblarni o&apos;zgartira olmaysiz.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSubmitting}>Bekor qilish</AlertDialogCancel>
-            <AlertDialogAction onClick={handleFinish} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saqlanmoqda...
-                </>
-              ) : (
-                "Tugatish"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={showLeaveWarning} onOpenChange={setShowLeaveWarning}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Diqqat!</AlertDialogTitle>
-            <AlertDialogDescription>
-              Imtihon tugallanmagan. Agar sahifani tark etsangiz, imtihon tugatiladi va saqlanmagan javoblar
-              yo&apos;qolishi mumkin. Davom etishni xohlaysizmi?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSubmitting}>Imtihonga qaytish</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleForceLeave}
-              disabled={isSubmitting}
-              className="bg-destructive hover:bg-destructive/90"
+        <div className="fixed bottom-0 left-0 right-0 border-t bg-background p-4">
+          <div className="flex items-center justify-between gap-4">
+            <Button
+              variant="outline"
+              onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+              disabled={currentIndex === 0}
             >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Tugatilmoqda...
-                </>
-              ) : (
-                "Imtihonni tugatish va chiqish"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Oldingi
+            </Button>
 
-      <AlertDialog open={showTimeUpDialog} onOpenChange={() => {}}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Vaqt tugadi!</AlertDialogTitle>
-            <AlertDialogDescription>Imtihon vaqti tugadi. Javoblaringiz avtomatik saqlanadi.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={handleTimeUpConfirm} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saqlanmoqda...
-                </>
-              ) : (
-                "Natijalarni ko'rish"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+            {currentIndex === (questions?.length || 3) - 1 ? (
+              <Button onClick={() => setShowFinishDialog(true)}>
+                <Flag className="h-4 w-4 mr-1" />
+                Imtihonni tugatish
+              </Button>
+            ) : (
+              <Button onClick={() => setCurrentIndex((i) => Math.min((questions?.length || 3) - 1, i + 1))}>
+                Keyingi
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <AlertDialog open={showFinishDialog} onOpenChange={setShowFinishDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Imtihonni tugatishni xohlaysizmi?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {answeredQuestions.length} / {questions?.length || 3} savolga javob berildi. Tugatganingizdan keyin
+                javoblarni o&apos;zgartira olmaysiz.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isSubmitting}>Bekor qilish</AlertDialogCancel>
+              <AlertDialogAction onClick={handleFinish} disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saqlanmoqda...
+                  </>
+                ) : (
+                  "Tugatish"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={showLeaveWarning} onOpenChange={setShowLeaveWarning}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-destructive">Diqqat!</AlertDialogTitle>
+              <AlertDialogDescription>
+                Imtihon tugallanmagan. Agar sahifani tark etsangiz, imtihon tugatiladi va saqlanmagan javoblar
+                yo&apos;qolishi mumkin. Davom etishni xohlaysizmi?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isSubmitting}>Imtihonga qaytish</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleForceLeave}
+                disabled={isSubmitting}
+                className="bg-destructive hover:bg-destructive/90"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Tugatilmoqda...
+                  </>
+                ) : (
+                  "Imtihonni tugatish va chiqish"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={showTimeUpDialog} onOpenChange={() => {}}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-destructive">Vaqt tugadi!</AlertDialogTitle>
+              <AlertDialogDescription>Imtihon vaqti tugadi. Javoblaringiz avtomatik saqlanadi.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={handleTimeUpConfirm} disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saqlanmoqda...
+                  </>
+                ) : (
+                  "Natijalarni ko'rish"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </ExamSecurityWrapper>
   )
 }

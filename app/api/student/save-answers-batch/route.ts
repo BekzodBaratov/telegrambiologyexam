@@ -70,12 +70,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Juda ko'p so'rov. Iltimos, biroz kuting." }, { status: 429 })
     }
 
-    const [attempt] = await sql`
+    const attemptResult = await sql`
       SELECT id, status, option_orders, part1_started_at, part2_started_at,
-             part1_finished_at, part2_finished_at
+             part1_finished_at, part2_finished_at, exam_id
       FROM student_attempts 
       WHERE id = ${attemptId}
     `
+    const attempt = Array.isArray(attemptResult) ? attemptResult[0] : attemptResult
 
     if (!attempt) {
       return NextResponse.json({ message: "Urinish topilmadi" }, { status: 404 })
@@ -85,15 +86,51 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Bu imtihon allaqachon yakunlangan" }, { status: 400 })
     }
 
+    const examResult = await sql`
+      SELECT test_duration, written_duration FROM exams WHERE id = ${attempt.exam_id}
+    `
+    const exam = Array.isArray(examResult) ? examResult[0] : examResult
+
+    const now = new Date()
+    const testDurationMs = (exam?.test_duration || 100) * 60 * 1000
+    const writtenDurationMs = (exam?.written_duration || 80) * 60 * 1000
+
+    // Check Part 1 time
+    if (attempt.part1_started_at && !attempt.part1_finished_at) {
+      const part1StartTime = new Date(attempt.part1_started_at).getTime()
+      const elapsed = now.getTime() - part1StartTime
+      if (elapsed > testDurationMs + 30000) {
+        // 30 second grace period
+        return NextResponse.json(
+          { message: "Vaqt tugagan. Javoblarni saqlab bo'lmaydi.", timeExpired: true },
+          { status: 400 },
+        )
+      }
+    }
+
+    // Check Part 2 time
+    if (attempt.part2_started_at && !attempt.part2_finished_at) {
+      const part2StartTime = new Date(attempt.part2_started_at).getTime()
+      const elapsed = now.getTime() - part2StartTime
+      if (elapsed > writtenDurationMs + 30000) {
+        // 30 second grace period
+        return NextResponse.json(
+          { message: "Vaqt tugagan. Javoblarni saqlab bo'lmaydi.", timeExpired: true },
+          { status: 400 },
+        )
+      }
+    }
+
     const optionOrders: Record<number, string[]> = attempt?.option_orders || {}
 
     for (const answer of answers) {
-      const [question] = await sql`
+      const questionResult = await sql`
         SELECT q.correct_answer, q.correct_option_id, q.max_score, qt.code as question_type_code
         FROM questions q
         JOIN question_types qt ON q.question_type_id = qt.id
         WHERE q.id = ${answer.questionId}
       `
+      const question = Array.isArray(questionResult) ? questionResult[0] : questionResult
 
       if (!question) continue
 
@@ -105,7 +142,6 @@ export async function POST(request: Request) {
       const questionType = question.question_type_code
 
       if (questionType === "Y1") {
-        // Check if student submitted an option ID directly (new format)
         if (answer.selectedOptionId) {
           selectedOptionId = answer.selectedOptionId
           const correctOptionId = resolveCorrectOptionId(
@@ -114,12 +150,9 @@ export async function POST(request: Request) {
             question.correct_answer,
           )
           isCorrect = isAnswerCorrect(selectedOptionId, correctOptionId)
-        }
-        // Fall back to letter-based validation (legacy format)
-        else if (submittedAnswer && question.correct_answer) {
+        } else if (submittedAnswer && question.correct_answer) {
           const originalLetter = getOriginalLetter(submittedAnswer, storedOrder)
           isCorrect = question.correct_answer.toUpperCase() === originalLetter.toUpperCase()
-          // Generate selected_option_id from the original letter for record-keeping
           selectedOptionId = generateOptionId(answer.questionId, originalLetter)
         }
       } else if (questionType === "Y2") {
@@ -132,7 +165,6 @@ export async function POST(request: Request) {
           isCorrect = question.correct_answer.toLowerCase() === submittedAnswer.toLowerCase()
         }
       } else {
-        // O2 questions - teacher graded
         isCorrect = null
       }
 

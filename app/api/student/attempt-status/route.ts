@@ -37,6 +37,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "Attempt not found" }, { status: 404 })
     }
 
+    // <CHANGE> Fetch total question count and part2 existence
+    const [examStats] = await sql`
+      SELECT 
+        COUNT(*) as total_questions,
+        COUNT(CASE WHEN eq.position > 40 THEN 1 END) as part2_question_count
+      FROM exam_questions eq
+      WHERE eq.exam_id = ${attempt.exam_id}
+    `
+
+    const totalQuestions = examStats ? Number(examStats.total_questions) : 0
+    const hasPart2 = examStats ? Number(examStats.part2_question_count) > 0 : false
+
     const now = new Date()
     const testDuration = (attempt.test_duration || 100) * 60 // in seconds
     const writtenDuration = (attempt.written_duration || 80) * 60 // in seconds
@@ -74,6 +86,12 @@ export async function GET(request: Request) {
       studentName: attempt.student_name,
       testCode: attempt.test_code,
       status: attempt.status,
+
+      // <CHANGE> Add exam configuration
+      totalQuestions,
+      hasPart2,
+      part1Duration: attempt.test_duration || 100, // in minutes
+      part2Duration: attempt.written_duration || 80, // in minutes
 
       // Part 1 status
       part1Started: !!attempt.part1_started_at,

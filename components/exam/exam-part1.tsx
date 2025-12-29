@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { ExamSecurityWrapper } from "./exam-security-wrapper"
 
 interface ExamPart1Props {
   examId: number
@@ -141,7 +142,6 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Flush pending answers before leaving
       if (pendingCount > 0) {
         flush()
       }
@@ -175,7 +175,6 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
         if (response.ok) {
           const data = await response.json()
           if (data.savedAnswers && data.savedAnswers.length > 0) {
-            // Use bulk restore for efficiency
             examStore.bulkRestoreAnswers(
               data.savedAnswers.map((sa: { questionId: number; answer: string; imageUrls?: string[] }) => ({
                 questionId: sa.questionId,
@@ -204,7 +203,6 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
   )
 
   const handleTimeUp = useCallback(async () => {
-    // Flush any pending answers before time up
     await flush()
     setShowTimeUpDialog(true)
   }, [flush])
@@ -212,7 +210,7 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
   const handleTimeUpConfirm = async () => {
     setIsSubmitting(true)
     try {
-      await flush() // Ensure all answers are saved
+      await flush()
       await fetch("/api/student/finish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -228,7 +226,7 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
   const handleFinish = async () => {
     setIsSubmitting(true)
     try {
-      await flush() // Ensure all answers are saved
+      await flush()
       await fetch("/api/student/finish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -244,7 +242,7 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
   const handleForceLeave = async () => {
     setIsSubmitting(true)
     try {
-      await flush() // Ensure all answers are saved
+      await flush()
       await fetch("/api/student/finish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -363,158 +361,160 @@ function ExamPart1Content({ examId, attemptId, examName, onComplete, onTimeExpir
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <ExamHeader
-        title="1-40 Savollar"
-        examName={examName}
-        attemptId={attemptId}
-        part="part1"
-        onTimeUp={handleTimeUp}
-      />
-
-      {(!isOnline || lastSaveError || isSaving || pendingCount > 0) && (
-        <div
-          className={`border-b px-4 py-2 text-sm flex items-center gap-2 ${
-            !isOnline || lastSaveError
-              ? "bg-amber-100 border-amber-200 text-amber-800"
-              : "bg-blue-50 border-blue-200 text-blue-700"
-          }`}
-        >
-          {!isOnline ? (
-            <>
-              <CloudOff className="h-4 w-4" />
-              <span>Internet aloqasi yo'q. Javoblar saqlanmayapti.</span>
-            </>
-          ) : lastSaveError ? (
-            <>
-              <WifiOff className="h-4 w-4" />
-              <span>Javoblarni saqlashda xatolik. Qayta urinilmoqda...</span>
-            </>
-          ) : isSaving ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Saqlanmoqda...</span>
-            </>
-          ) : pendingCount > 0 ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>{pendingCount} ta javob saqlanmoqda...</span>
-            </>
-          ) : null}
-        </div>
-      )}
-
-      <div className="p-4 space-y-4">
-        <QuestionNavigation
-          totalQuestions={displayItems.length}
-          currentIndex={currentIndex}
-          answeredQuestions={answeredIndices}
-          onNavigate={setCurrentIndex}
+    <ExamSecurityWrapper attemptId={attemptId} part="part1">
+      <div className="min-h-screen bg-background pb-24">
+        <ExamHeader
+          title="1-40 Savollar"
+          examName={examName}
+          attemptId={attemptId}
+          part="part1"
+          onTimeUp={handleTimeUp}
         />
 
-        {renderItem()}
-      </div>
-
-      <div className="fixed bottom-0 left-0 right-0 border-t bg-background p-4">
-        <div className="flex items-center justify-between gap-4">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-            disabled={currentIndex === 0}
+        {(!isOnline || lastSaveError || isSaving || pendingCount > 0) && (
+          <div
+            className={`border-b px-4 py-2 text-sm flex items-center gap-2 ${
+              !isOnline || lastSaveError
+                ? "bg-amber-100 border-amber-200 text-amber-800"
+                : "bg-blue-50 border-blue-200 text-blue-700"
+            }`}
           >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Oldingi
-          </Button>
+            {!isOnline ? (
+              <>
+                <CloudOff className="h-4 w-4" />
+                <span>Internet aloqasi yo&apos;q. Javoblar saqlanmayapti.</span>
+              </>
+            ) : lastSaveError ? (
+              <>
+                <WifiOff className="h-4 w-4" />
+                <span>Javoblarni saqlashda xatolik. Qayta urinilmoqda...</span>
+              </>
+            ) : isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Saqlanmoqda...</span>
+              </>
+            ) : pendingCount > 0 ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>{pendingCount} ta javob saqlanmoqda...</span>
+              </>
+            ) : null}
+          </div>
+        )}
 
-          {currentIndex === displayItems.length - 1 ? (
-            <Button onClick={() => setShowFinishDialog(true)}>
-              <Flag className="h-4 w-4 mr-1" />
-              Tugatish
-            </Button>
-          ) : (
-            <Button onClick={() => setCurrentIndex((i) => Math.min(displayItems.length - 1, i + 1))}>
-              Keyingi
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          )}
+        <div className="p-4 space-y-4">
+          <QuestionNavigation
+            totalQuestions={displayItems.length}
+            currentIndex={currentIndex}
+            answeredQuestions={answeredIndices}
+            onNavigate={setCurrentIndex}
+          />
+
+          {renderItem()}
         </div>
-      </div>
 
-      <AlertDialog open={showFinishDialog} onOpenChange={setShowFinishDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Testni tugatishni xohlaysizmi?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {answeredIndices.length} / {displayItems.length} savolga javob berildi. Tugatganingizdan keyin javoblarni
-              o&apos;zgartira olmaysiz.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSubmitting}>Bekor qilish</AlertDialogCancel>
-            <AlertDialogAction onClick={handleFinish} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saqlanmoqda...
-                </>
-              ) : (
-                "Tugatish"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={showLeaveWarning} onOpenChange={setShowLeaveWarning}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Diqqat!</AlertDialogTitle>
-            <AlertDialogDescription>
-              Test tugallanmagan. Agar sahifani tark etsangiz, test tugatiladi va saqlanmagan javoblar yo&apos;qolishi
-              mumkin. Davom etishni xohlaysizmi?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSubmitting}>Testga qaytish</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleForceLeave}
-              disabled={isSubmitting}
-              className="bg-destructive hover:bg-destructive/90"
+        <div className="fixed bottom-0 left-0 right-0 border-t bg-background p-4">
+          <div className="flex items-center justify-between gap-4">
+            <Button
+              variant="outline"
+              onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+              disabled={currentIndex === 0}
             >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Tugatilmoqda...
-                </>
-              ) : (
-                "Testni tugatish va chiqish"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Oldingi
+            </Button>
 
-      <AlertDialog open={showTimeUpDialog} onOpenChange={() => {}}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Vaqt tugadi!</AlertDialogTitle>
-            <AlertDialogDescription>Test vaqti tugadi. Javoblaringiz avtomatik saqlanadi.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={handleTimeUpConfirm} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saqlanmoqda...
-                </>
-              ) : (
-                "Davom etish"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+            {currentIndex === displayItems.length - 1 ? (
+              <Button onClick={() => setShowFinishDialog(true)}>
+                <Flag className="h-4 w-4 mr-1" />
+                Tugatish
+              </Button>
+            ) : (
+              <Button onClick={() => setCurrentIndex((i) => Math.min(displayItems.length - 1, i + 1))}>
+                Keyingi
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <AlertDialog open={showFinishDialog} onOpenChange={setShowFinishDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Testni tugatishni xohlaysizmi?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {answeredIndices.length} / {displayItems.length} savolga javob berildi. Tugatganingizdan keyin
+                javoblarni o&apos;zgartira olmaysiz.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isSubmitting}>Bekor qilish</AlertDialogCancel>
+              <AlertDialogAction onClick={handleFinish} disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saqlanmoqda...
+                  </>
+                ) : (
+                  "Tugatish"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={showLeaveWarning} onOpenChange={setShowLeaveWarning}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-destructive">Diqqat!</AlertDialogTitle>
+              <AlertDialogDescription>
+                Test tugallanmagan. Agar sahifani tark etsangiz, test tugatiladi va saqlanmagan javoblar yo&apos;qolishi
+                mumkin. Davom etishni xohlaysizmi?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isSubmitting}>Testga qaytish</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleForceLeave}
+                disabled={isSubmitting}
+                className="bg-destructive hover:bg-destructive/90"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Tugatilmoqda...
+                  </>
+                ) : (
+                  "Testni tugatish va chiqish"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={showTimeUpDialog} onOpenChange={() => {}}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-destructive">Vaqt tugadi!</AlertDialogTitle>
+              <AlertDialogDescription>Test vaqti tugadi. Javoblaringiz avtomatik saqlanadi.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={handleTimeUpConfirm} disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saqlanmoqda...
+                  </>
+                ) : (
+                  "Davom etish"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </ExamSecurityWrapper>
   )
 }
 

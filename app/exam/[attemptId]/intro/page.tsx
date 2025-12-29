@@ -7,6 +7,7 @@ import { Clock, FileText, Camera, Lock, Loader2, AlertCircle } from "lucide-reac
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useExamStore } from "@/lib/exam-store"
 
 interface AttemptStatus {
@@ -17,6 +18,10 @@ interface AttemptStatus {
   studentName: string
   testCode: string
   status: string
+  totalQuestions: number
+  hasPart2: boolean
+  part1Duration: number
+  part2Duration: number
   part1Started: boolean
   part1Finished: boolean
   part1RemainingSeconds: number
@@ -38,11 +43,11 @@ export default function ExamIntroPage() {
   const [isStartingPart2, setIsStartingPart2] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { data: attemptStatus, isLoading } = useSWR<AttemptStatus>(
-    `/api/student/attempt-status?attemptId=${attemptId}`,
-    fetcher,
-    { revalidateOnFocus: false },
-  )
+  const {
+    data: attemptStatus,
+    isLoading,
+    error: fetchError,
+  } = useSWR<AttemptStatus>(`/api/student/attempt-status?attemptId=${attemptId}`, fetcher, { revalidateOnFocus: false })
 
   const handleStartPart1 = async () => {
     setIsStartingPart1(true)
@@ -124,8 +129,53 @@ export default function ExamIntroPage() {
 
   if (isLoading || !attemptStatus) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-background p-4">
+        <div className="mx-auto max-w-2xl space-y-6">
+          <div className="text-center space-y-2">
+            <Skeleton className="h-8 w-64 mx-auto" />
+            <Skeleton className="h-4 w-40 mx-auto" />
+          </div>
+          <div className="grid gap-4">
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-4 w-48" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-4 w-48" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Alert variant="destructive" className="max-w-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Ma'lumotlarni yuklashda xatolik yuz berdi.
+            <Button variant="outline" className="mt-2 w-full bg-transparent" onClick={() => window.location.reload()}>
+              Qayta urinish
+            </Button>
+          </AlertDescription>
+        </Alert>
       </div>
     )
   }
@@ -134,12 +184,18 @@ export default function ExamIntroPage() {
   const part2Completed = attemptStatus.part2Finished
   const isPart2Disabled = !part1Completed
 
+  const hasSecondPart = attemptStatus.hasPart2
+
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="mx-auto max-w-2xl space-y-6">
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold text-foreground">{attemptStatus.examName || "Biologiya Imtihoni"}</h1>
+          <h1 className="text-2xl font-bold text-foreground">{attemptStatus.examName}</h1>
           <p className="text-muted-foreground">Xush kelibsiz, {attemptStatus.studentName}</p>
+          <p className="text-sm text-muted-foreground">
+            Jami {attemptStatus.totalQuestions} ta savol
+            {hasSecondPart ? " • Imtihon 2 qismdan iborat" : " • Imtihon 1 qismdan iborat"}
+          </p>
         </div>
 
         {error && (
@@ -156,7 +212,7 @@ export default function ExamIntroPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <FileText className="h-5 w-5 text-primary" />
-                  1-40 Savollar
+                  1-qism
                 </CardTitle>
                 {part1Completed && (
                   <span className="rounded-full bg-green-500 px-3 py-1 text-xs text-white">Tugallangan</span>
@@ -167,7 +223,7 @@ export default function ExamIntroPage() {
             <CardContent className="space-y-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
-                <span>100 daqiqa</span>
+                <span>{attemptStatus.part1Duration} daqiqa</span>
               </div>
               <div className="space-y-2 text-sm">
                 <p>
@@ -195,63 +251,64 @@ export default function ExamIntroPage() {
             </CardContent>
           </Card>
 
-          {/* Part 2 Card */}
-          <Card className={part2Completed ? "border-green-500 bg-green-50" : isPart2Disabled ? "opacity-60" : ""}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  {isPart2Disabled ? (
-                    <Lock className="h-5 w-5 text-muted-foreground" />
-                  ) : (
-                    <Camera className="h-5 w-5 text-primary" />
+          {hasSecondPart && (
+            <Card className={part2Completed ? "border-green-500 bg-green-50" : isPart2Disabled ? "opacity-60" : ""}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    {isPart2Disabled ? (
+                      <Lock className="h-5 w-5 text-muted-foreground" />
+                    ) : (
+                      <Camera className="h-5 w-5 text-primary" />
+                    )}
+                    2-qism
+                  </CardTitle>
+                  {part2Completed && (
+                    <span className="rounded-full bg-green-500 px-3 py-1 text-xs text-white">Tugallangan</span>
                   )}
-                  41-43 Savollar
-                </CardTitle>
-                {part2Completed && (
-                  <span className="rounded-full bg-green-500 px-3 py-1 text-xs text-white">Tugallangan</span>
-                )}
-              </div>
-              <CardDescription>Yozma ishlar - rasm yuklash bilan</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                <span>80 daqiqa</span>
-              </div>
-              <div className="space-y-2 text-sm">
-                <p>
-                  <strong>41-43:</strong> Kengaytirilgan javoblar (O2)
-                </p>
-                <p className="text-muted-foreground">Har bir savol uchun rasm yuklash talab qilinadi</p>
-              </div>
-              {isPart2Disabled && (
-                <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
-                  <p className="text-sm text-amber-800">Avval 1-qismni tugatishingiz kerak</p>
                 </div>
-              )}
-              <Button
-                onClick={handleStartPart2}
-                className="w-full"
-                disabled={part2Completed || isPart2Disabled || isStartingPart2}
-              >
-                {isStartingPart2 ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Boshlanmoqda...
-                  </>
-                ) : part2Completed ? (
-                  "Tugallangan"
-                ) : isPart2Disabled ? (
-                  "Qulflangan"
-                ) : (
-                  "Boshlash"
+                <CardDescription>Yozma ishlar - rasm yuklash bilan</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  <span>{attemptStatus.part2Duration} daqiqa</span>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <p>
+                    <strong>41-43:</strong> Kengaytirilgan javoblar (O2)
+                  </p>
+                  <p className="text-muted-foreground">Har bir savol uchun rasm yuklash talab qilinadi</p>
+                </div>
+                {isPart2Disabled && (
+                  <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+                    <p className="text-sm text-amber-800">Avval 1-qismni tugatishingiz kerak</p>
+                  </div>
                 )}
-              </Button>
-            </CardContent>
-          </Card>
+                <Button
+                  onClick={handleStartPart2}
+                  className="w-full"
+                  disabled={part2Completed || isPart2Disabled || isStartingPart2}
+                >
+                  {isStartingPart2 ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Boshlanmoqda...
+                    </>
+                  ) : part2Completed ? (
+                    "Tugallangan"
+                  ) : isPart2Disabled ? (
+                    "Qulflangan"
+                  ) : (
+                    "Boshlash"
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        {part1Completed && part2Completed && (
+        {part1Completed && (!hasSecondPart || part2Completed) && (
           <Card className="border-green-500 bg-green-50">
             <CardContent className="pt-6 text-center">
               <h3 className="text-lg font-semibold text-green-700">Imtihon tugallandi!</h3>
